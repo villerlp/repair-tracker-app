@@ -402,7 +402,7 @@ export default function AddRecommendation() {
                           updated[idx].title = e.target.value;
                           setExtractedRecs(updated);
                         }}
-                        className="w-full px-3 py-2 border border-slate-300 text-sm bg-white"
+                        className="w-full px-3 py-2 border border-slate-300 text-sm bg-white text-black"
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -415,7 +415,7 @@ export default function AddRecommendation() {
                           setExtractedRecs(updated);
                         }}
                         rows={2}
-                        className="w-full px-3 py-2 border border-slate-300 text-sm bg-white"
+                        className="w-full px-3 py-2 border border-slate-300 text-sm bg-white text-black"
                       />
                     </div>
                     <div>
@@ -427,7 +427,7 @@ export default function AddRecommendation() {
                           updated[idx].priority = e.target.value;
                           setExtractedRecs(updated);
                         }}
-                        className="w-full px-3 py-2 border border-slate-300 text-sm bg-white"
+                        className="w-full px-3 py-2 border border-slate-300 text-sm bg-white text-black"
                       >
                         <option value="low">Low</option>
                         <option value="medium">Medium</option>
@@ -444,7 +444,7 @@ export default function AddRecommendation() {
                           updated[idx].status = e.target.value;
                           setExtractedRecs(updated);
                         }}
-                        className="w-full px-3 py-2 border border-slate-300 text-sm bg-white"
+                        className="w-full px-3 py-2 border border-slate-300 text-sm bg-white text-black"
                       >
                         <option value="pending_approval">Pending Approval</option>
                         <option value="approved">Approved</option>

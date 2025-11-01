@@ -48,6 +48,13 @@ const mockMetrics: Metrics = {
   total_recommendations: 48,
 };
 
+type Weather = {
+  temp: number;
+  condition: string;
+  icon: string;
+  city: string;
+};
+
 export default function Dashboard() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -56,6 +63,8 @@ export default function Dashboard() {
   const [googlesheetsMessage, setGooglesheetsMessage] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfMessage, setPdfMessage] = useState("");
+  const [weather, setWeather] = useState<Weather | null>(null);
+  const [zipCode, setZipCode] = useState("70002");
 
   const exportToGoogleSheets = async () => {
     if (recommendations.length === 0) {
@@ -229,6 +238,59 @@ export default function Dashboard() {
     printWindow.document.close();
   };
 
+  const fetchWeather = async (location: string) => {
+    try {
+      // Using Open-Meteo free API (no key required)
+      // First geocode the location
+      const geoRes = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`
+      );
+      const geoData = await geoRes.json();
+      
+      if (geoData.results && geoData.results.length > 0) {
+        const { latitude, longitude, name } = geoData.results[0];
+        
+        // Get weather data
+        const weatherRes = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&temperature_unit=fahrenheit&timezone=auto`
+        );
+        const weatherData = await weatherRes.json();
+        
+        // Map weather codes to conditions
+        const weatherCodeMap: Record<number, { condition: string; icon: string }> = {
+          0: { condition: 'Clear', icon: '☀️' },
+          1: { condition: 'Mainly Clear', icon: '🌤️' },
+          2: { condition: 'Partly Cloudy', icon: '⛅' },
+          3: { condition: 'Overcast', icon: '☁️' },
+          45: { condition: 'Foggy', icon: '🌫️' },
+          48: { condition: 'Foggy', icon: '🌫️' },
+          51: { condition: 'Light Drizzle', icon: '🌦️' },
+          53: { condition: 'Drizzle', icon: '🌦️' },
+          55: { condition: 'Heavy Drizzle', icon: '🌧️' },
+          61: { condition: 'Light Rain', icon: '🌧️' },
+          63: { condition: 'Rain', icon: '🌧️' },
+          65: { condition: 'Heavy Rain', icon: '⛈️' },
+          71: { condition: 'Light Snow', icon: '🌨️' },
+          73: { condition: 'Snow', icon: '❄️' },
+          75: { condition: 'Heavy Snow', icon: '❄️' },
+          95: { condition: 'Thunderstorm', icon: '⛈️' },
+        };
+        
+        const code = weatherData.current.weather_code;
+        const weatherInfo = weatherCodeMap[code] || { condition: 'Unknown', icon: '🌡️' };
+        
+        setWeather({
+          temp: Math.round(weatherData.current.temperature_2m),
+          condition: weatherInfo.condition,
+          icon: weatherInfo.icon,
+          city: name,
+        });
+      }
+    } catch (error) {
+      console.error('Weather fetch error:', error);
+    }
+  };
+
   useEffect(() => {
     async function load() {
       try {
@@ -249,6 +311,9 @@ export default function Dashboard() {
         // fallback to mock data if API not available
         setMetrics(mockMetrics);
       }
+      
+      // Fetch weather
+      fetchWeather(zipCode);
 
       // Fetch user role
       try {
@@ -335,6 +400,25 @@ export default function Dashboard() {
     ],
   };
 
+  // Status breakdown chart data
+  const statusBreakdownData = {
+    labels: ["Approved", "Pending Approval", "Not Approved", "Deferred", "Temporary Repair", "Overdue"],
+    datasets: [
+      {
+        data: [
+          recommendations.filter(r => r.status === 'approved').length,
+          recommendations.filter(r => r.status === 'pending_approval').length,
+          recommendations.filter(r => r.status === 'not_approved').length,
+          recommendations.filter(r => r.status === 'deferred').length,
+          recommendations.filter(r => r.status === 'temporary_repair').length,
+          metrics.overdue_count,
+        ],
+        backgroundColor: ["#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#3b82f6", "#dc2626"],
+        hoverOffset: 6,
+      },
+    ],
+  };
+
   return (
     <div className="p-6 bg-slate-50 min-h-screen">
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
@@ -389,7 +473,63 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="w-1/6">
+      {/* Charts and Weather Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        {/* Status Breakdown Chart */}
+        <div className="bg-white border border-slate-300 shadow-sm p-4">
+          <h3 className="text-lg font-semibold mb-4 text-slate-800 uppercase tracking-tight">
+            Status Breakdown
+          </h3>
+          <div className="h-64 flex items-center justify-center">
+            <Doughnut data={statusBreakdownData} options={{ maintainAspectRatio: false }} />
+          </div>
+        </div>
+
+        {/* Weather Widget */}
+        <div className="bg-white border border-slate-300 shadow-sm p-4">
+          <h3 className="text-lg font-semibold mb-2 text-slate-800 uppercase tracking-tight">
+            Weather Conditions
+          </h3>
+          <div className="mb-3">
+            <label className="block text-xs text-slate-600 mb-1 uppercase tracking-wide font-semibold">
+              Location (City or Zip)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={zipCode}
+                onChange={(e) => setZipCode(e.target.value)}
+                placeholder="Enter city or zip"
+                className="flex-1 px-3 py-2 border border-slate-300 text-sm focus:outline-none focus:border-slate-500"
+              />
+              <button
+                onClick={() => fetchWeather(zipCode)}
+                className="px-3 py-2 bg-slate-700 text-white hover:bg-slate-800 text-xs uppercase tracking-wide font-semibold transition-colors"
+              >
+                Update
+              </button>
+            </div>
+          </div>
+          {weather ? (
+            <div className="text-center py-4">
+              <div className="text-6xl mb-2">{weather.icon}</div>
+              <div className="text-4xl font-bold text-slate-800 mb-1">
+                {weather.temp}°F
+              </div>
+              <div className="text-lg text-slate-600 mb-1">{weather.condition}</div>
+              <div className="text-sm text-slate-500 uppercase tracking-wide">
+                {weather.city}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-slate-500">
+              <div className="text-4xl mb-2">🌡️</div>
+              <div className="text-sm">Loading weather...</div>
+            </div>
+          )}
+        </div>
+
+        {/* Quick Actions */}
         <div className="bg-white border border-slate-300 shadow-sm p-4">
           <h3 className="text-lg font-semibold mb-2 text-slate-800 uppercase tracking-tight">
             Quick Actions

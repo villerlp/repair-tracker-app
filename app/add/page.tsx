@@ -23,6 +23,7 @@ export default function AddRecommendation() {
   const [status, setStatus] = useState("pending_approval");
   const [dueDate, setDueDate] = useState("");
   const [inspectionDate, setInspectionDate] = useState("");
+  const [inspector, setInspector] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [isClient, setIsClient] = useState(false);
@@ -240,6 +241,7 @@ export default function AddRecommendation() {
           status,
           due_date: dueDate || null,
           inspection_date: inspectionDate || null,
+          inspector: inspector || null,
           // Note: attachments are uploaded but not stored in DB yet
           // TODO: Add attachments column to database schema
         }),
@@ -276,6 +278,7 @@ export default function AddRecommendation() {
       setStatus("pending_approval");
       setDueDate("");
       setInspectionDate("");
+      setInspector("");
       setAttachments([]);
       
       // Fetch new recommendation number
@@ -548,6 +551,23 @@ export default function AddRecommendation() {
                   <option value="not_approved">Not Approved</option>
                   <option value="deferred">Deferred</option>
                   <option value="temporary_repair">Temporary Repair</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-2 uppercase tracking-wide">
+                  Inspector
+                </label>
+                <select
+                  value={inspector}
+                  onChange={(e) => setInspector(e.target.value)}
+                  className="block w-full px-4 py-3 border border-slate-300 bg-slate-50 text-slate-900 focus:outline-none focus:border-slate-500 focus:bg-white transition-colors"
+                >
+                  <option value="">Select Inspector</option>
+                  <option value="Lonnie P. Villermin">Lonnie P. Villermin</option>
+                  <option value="Justin Butler">Justin Butler</option>
+                  <option value="John Smith">John Smith</option>
+                  <option value="Jane Doe">Jane Doe</option>
+                  <option value="Mike Johnson">Mike Johnson</option>
                 </select>
               </div>
               <div>

@@ -101,12 +101,12 @@ export default function EditRecommendation() {
         const numberResponse = await fetch("/api/recommendations/next-number");
         if (numberResponse.ok) {
           const numberData = await numberResponse.json();
-          recNumber = numberData.nextNumber;
+          recNumber = numberData.recommendation_number;
           setRecommendationNumber(recNumber);
         }
       }
 
-      console.log('Submitting update for id:', id);
+      console.log('Submitting update for id:', id, 'with recommendation_number:', recNumber);
       const response = await fetch(`/api/recommendations/${id}`, {
         method: "PUT",
         headers: {

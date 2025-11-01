@@ -165,7 +165,7 @@ export default function AddRecommendation() {
         let recNumber = undefined;
         if (numberResponse.ok) {
           const numberData = await numberResponse.json();
-          recNumber = numberData.nextNumber;
+          recNumber = numberData.recommendation_number;
         }
 
         const response = await fetch("/api/recommendations", {

@@ -427,18 +427,32 @@ export default function Dashboard() {
   };
 
   // Status breakdown chart data
+  const statusCounts = [
+    recommendations.filter(r => r.status === 'approved').length,
+    recommendations.filter(r => r.status === 'pending_approval').length,
+    recommendations.filter(r => r.status === 'not_approved').length,
+    recommendations.filter(r => r.status === 'deferred').length,
+    recommendations.filter(r => r.status === 'temporary_repair').length,
+    metrics.overdue_count,
+  ];
+  const totalCount = statusCounts.reduce((a, b) => a + b, 0);
+  
   const statusBreakdownData = {
-    labels: ["Approved", "Pending Approval", "Not Approved", "Deferred", "Temporary Repair", "Overdue"],
+    labels: [
+      "Approved",
+      "Pending Approval",
+      "Not Approved",
+      "Deferred",
+      "Temporary Repair",
+      "Overdue"
+    ].map((label, idx) => {
+      const count = statusCounts[idx];
+      const percentage = totalCount > 0 ? ((count / totalCount) * 100).toFixed(1) : '0.0';
+      return `${label}: ${count} (${percentage}%)`;
+    }),
     datasets: [
       {
-        data: [
-          recommendations.filter(r => r.status === 'approved').length,
-          recommendations.filter(r => r.status === 'pending_approval').length,
-          recommendations.filter(r => r.status === 'not_approved').length,
-          recommendations.filter(r => r.status === 'deferred').length,
-          recommendations.filter(r => r.status === 'temporary_repair').length,
-          metrics.overdue_count,
-        ],
+        data: statusCounts,
         backgroundColor: ["#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#3b82f6", "#dc2626"],
         hoverOffset: 6,
       },
@@ -453,18 +467,15 @@ export default function Dashboard() {
         labels: {
           padding: 10,
           font: {
-            size: 11,
+            size: 10,
           },
         },
       },
       tooltip: {
         callbacks: {
           label: function(context: any) {
-            const label = context.label || '';
             const value = context.parsed || 0;
-            const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
-            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
-            return `${label}: ${value} (${percentage}%)`;
+            return `${value} recommendations`;
           }
         }
       }

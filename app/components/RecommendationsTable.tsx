@@ -32,53 +32,55 @@ export default function RecommendationsTable({
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Recommendation Number
+            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Rec #
             </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Priority
             </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Title
             </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Description
             </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Status
             </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Inspection Date
+            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Inspection
             </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Due Date
+            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Due
             </th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Attachments
+            <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Files
             </th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
               Actions
             </th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {displayRecs.map((rec) => (
-            <tr key={rec.id}>
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-semibold text-gray-900">
+            <tr key={rec.id} className="hover:bg-gray-50">
+              <td className="px-3 py-2 whitespace-nowrap text-xs font-mono font-semibold text-gray-900">
                 {rec.recommendation_number || 'N/A'}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 capitalize">
+              <td className="px-3 py-2 whitespace-nowrap text-xs font-medium text-gray-900 capitalize">
                 {rec.priority}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">
                 {rec.title}
               </td>
-              <td className="px-6 py-4 text-sm text-gray-500">
-                {rec.description}
+              <td className="px-3 py-2 text-xs text-gray-500 max-w-md">
+                <div className="line-clamp-2">
+                  {rec.description}
+                </div>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap">
+              <td className="px-3 py-2 whitespace-nowrap">
                 <span
-                  className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full capitalize ${
+                  className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded capitalize ${
                     rec.status === "completed"
                       ? "bg-green-100 text-green-800"
                       : rec.status === "in_progress"
@@ -91,17 +93,17 @@ export default function RecommendationsTable({
                   {rec.status.replace('_', ' ')}
                 </span>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
                 {rec.inspection_date
-                  ? new Date(rec.inspection_date).toLocaleDateString()
-                  : "N/A"}
+                  ? new Date(rec.inspection_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
+                  : "—"}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
                 {rec.due_date
-                  ? new Date(rec.due_date).toLocaleDateString()
-                  : "N/A"}
+                  ? new Date(rec.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
+                  : "—"}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-center">
+              <td className="px-3 py-2 whitespace-nowrap text-center">
                 {rec.has_attachments ? (
                   <button
                     onClick={() => router.push(`/edit/${rec.id}`)}
@@ -109,7 +111,7 @@ export default function RecommendationsTable({
                     title="View attachments"
                   >
                     <svg
-                      className="w-5 h-5"
+                      className="w-4 h-4"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -127,10 +129,10 @@ export default function RecommendationsTable({
                   <span className="text-xs text-gray-400">—</span>
                 )}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-center">
+              <td className="px-3 py-2 whitespace-nowrap text-center">
                 <button
                   onClick={() => router.push(`/edit/${rec.id}`)}
-                  className="px-3 py-1 text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-300 hover:bg-slate-200 uppercase tracking-wide transition-colors"
+                  className="px-2 py-1 text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-300 hover:bg-slate-200 uppercase tracking-wide transition-colors"
                   title="Edit recommendation"
                 >
                   Edit

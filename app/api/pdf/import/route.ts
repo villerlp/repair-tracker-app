@@ -180,29 +180,20 @@ export async function POST(request: Request) {
       candidates.push({ title: fallbackTitle, description: text.slice(0, 2000) })
     }
 
-    // Insert candidates into Supabase
-    const insertPayload = candidates.map(c => ({
-      user_id: user.id,
+    // Return candidates WITHOUT inserting - let the Add page handle batch insert
+    // This ensures each recommendation gets its own unique recommendation number
+    const records = candidates.map((c, idx) => ({
+      id: `temp-${Date.now()}-${idx}`,
       title: c.title,
       description: c.description || '',
       priority: 'medium',
       status: 'pending_approval',
       due_date: null,
       inspection_date: null,
-      recommendation_number: c.recommendation_number,
+      recommendation_number: c.recommendation_number, // May be undefined, will be generated on insert
     }))
 
-    const { data, error } = await supabase
-      .from('repair_recommendations')
-      .insert(insertPayload)
-      .select()
-
-    if (error) {
-      console.error('PDF import DB error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, imported: data?.length || 0, records: data })
+    return NextResponse.json({ success: true, imported: records.length, records })
   } catch (err: unknown) {
     console.error('PDF import error:', err)
     const message = err instanceof Error ? err.message : 'Import failed'

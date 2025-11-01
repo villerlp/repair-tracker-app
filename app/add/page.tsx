@@ -159,11 +159,21 @@ export default function AddRecommendation() {
 
     for (const rec of extractedRecs) {
       try {
+        // Generate a new recommendation number for each item
+        let recNumber = rec.recommendation_number;
+        if (!recNumber) {
+          const numberResponse = await fetch("/api/recommendations/next-number");
+          if (numberResponse.ok) {
+            const numberData = await numberResponse.json();
+            recNumber = numberData.nextNumber;
+          }
+        }
+
         const response = await fetch("/api/recommendations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            recommendation_number: rec.recommendation_number,
+            recommendation_number: recNumber,
             title: rec.title,
             description: rec.description,
             priority: rec.priority,

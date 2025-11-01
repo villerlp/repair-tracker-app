@@ -445,6 +445,32 @@ export default function Dashboard() {
     ],
   };
 
+  const statusBreakdownOptions = {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom' as const,
+        labels: {
+          padding: 10,
+          font: {
+            size: 11,
+          },
+        },
+      },
+      tooltip: {
+        callbacks: {
+          label: function(context: any) {
+            const label = context.label || '';
+            const value = context.parsed || 0;
+            const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+            return `${label}: ${value} (${percentage}%)`;
+          }
+        }
+      }
+    }
+  };
+
   return (
     <div className="p-6 bg-slate-50 min-h-screen">
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
@@ -506,8 +532,8 @@ export default function Dashboard() {
           <h3 className="text-lg font-semibold mb-4 text-slate-800 uppercase tracking-tight">
             Status Breakdown
           </h3>
-          <div className="h-64 flex items-center justify-center">
-            <Doughnut data={statusBreakdownData} options={{ maintainAspectRatio: false }} />
+          <div className="h-80 flex items-center justify-center">
+            <Doughnut data={statusBreakdownData} options={statusBreakdownOptions} />
           </div>
         </div>
 

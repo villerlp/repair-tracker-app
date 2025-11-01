@@ -433,25 +433,26 @@ export default function Dashboard() {
             >
               Export PDF
             </button>
-            <div className="flex gap-1">
-              <input
-                id="pdf-import-input"
-                type="file"
-                accept="application/pdf"
-                className="text-xs"
-              />
-              <button
-                onClick={async () => {
-                  const input = document.getElementById('pdf-import-input') as HTMLInputElement | null
+            <input
+              id="pdf-import-input"
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+            />
+            <button
+              onClick={async () => {
+                const input = document.getElementById('pdf-import-input') as HTMLInputElement | null
+                input?.click()
+                input?.addEventListener('change', async () => {
                   const file = input?.files?.[0] || null
                   await importFromPDFFile(file)
-                }}
-                disabled={pdfLoading}
-                className="btn btn-outline px-2 py-2 text-xs border border-slate-400 text-slate-700 w-full hover:bg-slate-50 uppercase tracking-wide font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {pdfLoading ? 'Importing...' : 'Import from PDF'}
-              </button>
-            </div>
+                }, { once: true })
+              }}
+              disabled={pdfLoading}
+              className="btn btn-outline px-2 py-2 text-xs border border-slate-400 text-slate-700 w-full hover:bg-slate-50 uppercase tracking-wide font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {pdfLoading ? 'Importing...' : 'Import from PDF'}
+            </button>
             <button 
               onClick={exportToGoogleSheets}
               disabled={googlesheetsLoading}

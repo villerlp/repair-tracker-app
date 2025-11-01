@@ -55,6 +55,14 @@ type Weather = {
   city: string;
 };
 
+type ForecastDay = {
+  date: string;
+  maxTemp: number;
+  minTemp: number;
+  condition: string;
+  icon: string;
+};
+
 export default function Dashboard() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -64,6 +72,7 @@ export default function Dashboard() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfMessage, setPdfMessage] = useState("");
   const [weather, setWeather] = useState<Weather | null>(null);
+  const [forecast, setForecast] = useState<ForecastDay[]>([]);
   const [zipCode, setZipCode] = useState("70002");
 
   const exportToGoogleSheets = async () => {
@@ -250,9 +259,9 @@ export default function Dashboard() {
       if (geoData.results && geoData.results.length > 0) {
         const { latitude, longitude, name } = geoData.results[0];
         
-        // Get weather data
+        // Get weather data including 3-day forecast
         const weatherRes = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&temperature_unit=fahrenheit&timezone=auto`
+          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&temperature_unit=fahrenheit&timezone=auto&forecast_days=3`
         );
         const weatherData = await weatherRes.json();
         
@@ -285,6 +294,23 @@ export default function Dashboard() {
           icon: weatherInfo.icon,
           city: name,
         });
+
+        // Process 3-day forecast
+        const forecastDays: ForecastDay[] = [];
+        for (let i = 0; i < 3; i++) {
+          const forecastCode = weatherData.daily.weather_code[i];
+          const forecastInfo = weatherCodeMap[forecastCode] || { condition: 'Unknown', icon: '🌡️' };
+          const date = new Date(weatherData.daily.time[i]);
+          
+          forecastDays.push({
+            date: date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+            maxTemp: Math.round(weatherData.daily.temperature_2m_max[i]),
+            minTemp: Math.round(weatherData.daily.temperature_2m_min[i]),
+            condition: forecastInfo.condition,
+            icon: forecastInfo.icon,
+          });
+        }
+        setForecast(forecastDays);
       }
     } catch (error) {
       console.error('Weather fetch error:', error);
@@ -511,15 +537,40 @@ export default function Dashboard() {
             </div>
           </div>
           {weather ? (
-            <div className="text-center py-4">
-              <div className="text-6xl mb-2">{weather.icon}</div>
-              <div className="text-4xl font-bold text-slate-800 mb-1">
-                {weather.temp}°F
+            <div>
+              <div className="text-center py-3 border-b border-slate-200">
+                <div className="text-5xl mb-2">{weather.icon}</div>
+                <div className="text-3xl font-bold text-slate-800 mb-1">
+                  {weather.temp}°F
+                </div>
+                <div className="text-base text-slate-600 mb-1">{weather.condition}</div>
+                <div className="text-xs text-slate-500 uppercase tracking-wide">
+                  {weather.city}
+                </div>
               </div>
-              <div className="text-lg text-slate-600 mb-1">{weather.condition}</div>
-              <div className="text-sm text-slate-500 uppercase tracking-wide">
-                {weather.city}
-              </div>
+              {forecast.length > 0 && (
+                <div className="mt-3">
+                  <div className="text-xs text-slate-600 uppercase tracking-wide font-semibold mb-2">
+                    3-Day Forecast
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {forecast.map((day, idx) => (
+                      <div key={idx} className="text-center p-2 bg-slate-50 rounded">
+                        <div className="text-xs text-slate-600 font-semibold mb-1">
+                          {day.date.split(',')[0]}
+                        </div>
+                        <div className="text-2xl mb-1">{day.icon}</div>
+                        <div className="text-xs font-bold text-slate-800">
+                          {day.maxTemp}° / {day.minTemp}°
+                        </div>
+                        <div className="text-xs text-slate-500 truncate">
+                          {day.condition}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-8 text-slate-500">

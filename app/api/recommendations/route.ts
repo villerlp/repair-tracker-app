@@ -65,7 +65,6 @@ export async function POST(request: Request) {
       status: body.status || 'pending_approval',
       due_date: body.due_date,
       inspection_date: body.inspection_date,
-      attachments: body.attachments || [],
     }
 
     // Try to add recommendation_number if provided and column exists

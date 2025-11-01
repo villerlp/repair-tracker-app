@@ -180,7 +180,6 @@ export default function AddRecommendation() {
             status: rec.status,
             due_date: rec.dueDate || null,
             inspection_date: rec.inspectionDate || null,
-            attachments: [],
           }),
         });
         if (response.ok) {
@@ -241,7 +240,8 @@ export default function AddRecommendation() {
           status,
           due_date: dueDate || null,
           inspection_date: inspectionDate || null,
-          attachments: uploadedAttachments,
+          // Note: attachments are uploaded but not stored in DB yet
+          // TODO: Add attachments column to database schema
         }),
       });
 

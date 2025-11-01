@@ -7,6 +7,7 @@ export const runtime = "edge";
 
 type Recommendation = {
   id: string;
+  recommendation_number: string | null;
   title: string;
   description: string;
   priority: string;
@@ -16,6 +17,7 @@ type Recommendation = {
 };
 
 export default function EditRecommendation() {
+  const [recommendationNumber, setRecommendationNumber] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
@@ -65,6 +67,7 @@ export default function EditRecommendation() {
         if (response.ok) {
           const data: Recommendation = await response.json();
           console.log('Loaded recommendation:', data);
+          setRecommendationNumber(data.recommendation_number || "");
           setTitle(data.title);
           setDescription(data.description);
           setPriority(data.priority);
@@ -92,6 +95,17 @@ export default function EditRecommendation() {
     setMessage("");
 
     try {
+      // If there's no recommendation number, generate one
+      let recNumber = recommendationNumber;
+      if (!recNumber || recNumber.trim() === "") {
+        const numberResponse = await fetch("/api/recommendations/next-number");
+        if (numberResponse.ok) {
+          const numberData = await numberResponse.json();
+          recNumber = numberData.nextNumber;
+          setRecommendationNumber(recNumber);
+        }
+      }
+
       console.log('Submitting update for id:', id);
       const response = await fetch(`/api/recommendations/${id}`, {
         method: "PUT",
@@ -99,6 +113,7 @@ export default function EditRecommendation() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          recommendation_number: recNumber,
           title,
           description,
           priority,
@@ -153,6 +168,21 @@ export default function EditRecommendation() {
             </p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-2 uppercase tracking-wide">
+                Recommendation Number
+              </label>
+              <input
+                type="text"
+                value={recommendationNumber}
+                onChange={(e) => setRecommendationNumber(e.target.value)}
+                className="block w-full px-4 py-3 border border-slate-300 bg-slate-50 text-slate-900 focus:outline-none focus:border-slate-500 focus:bg-white transition-colors"
+                placeholder="Will be auto-generated if empty"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Leave empty to auto-generate on save
+              </p>
+            </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-2 uppercase tracking-wide">
                 Title <span className="text-slate-500">*</span>

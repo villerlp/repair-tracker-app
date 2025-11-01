@@ -111,21 +111,28 @@ export async function PUT(
     console.log("User authenticated:", user.id);
 
     const body = await request.json();
-    const { title, description, priority, status, due_date, inspection_date } = body;
+    const { recommendation_number, title, description, priority, status, due_date, inspection_date } = body;
 
     console.log("Updating recommendation:", id, body);
 
+    const updateData: any = {
+      title,
+      description,
+      priority,
+      status,
+      due_date,
+      inspection_date,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Only include recommendation_number if provided
+    if (recommendation_number) {
+      updateData.recommendation_number = recommendation_number;
+    }
+
     const { data, error } = await supabase
       .from("repair_recommendations")
-      .update({
-        title,
-        description,
-        priority,
-        status,
-        due_date,
-        inspection_date,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq("id", id)
       .select()
       .single();

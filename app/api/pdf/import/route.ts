@@ -1,5 +1,8 @@
 import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
+import { writeFile, unlink } from 'fs/promises'
+import { join } from 'path'
+import { tmpdir } from 'os'
 
 // Use Node.js runtime for PDF extraction
 export const runtime = 'nodejs'
@@ -14,39 +17,46 @@ export async function POST(request: Request) {
 
     // Expect raw PDF binary in request body (Content-Type: application/pdf)
     const arrayBuffer = await request.arrayBuffer()
-    const uint8Array = new Uint8Array(arrayBuffer)
+    const buffer = Buffer.from(arrayBuffer)
 
-    // Use pdfjs-dist (official PDF.js library) - dynamically import the ESM version
-    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    // Use pdf2json which works reliably in Node.js
+    const PDFParser = require('pdf2json')
+    const pdfParser = new PDFParser()
     
-    // Disable worker in Node.js environment
-    pdfjsLib.GlobalWorkerOptions.workerSrc = ''
-    
-    // Extract text from PDF
-    const loadingTask = pdfjsLib.getDocument({ 
-      data: uint8Array,
-      useWorkerFetch: false,
-      isEvalSupported: false,
-      useSystemFonts: true
-    })
-    const pdfDocument = await loadingTask.promise
-    
-    let text = ''
-    
-    // Extract text from each page
-    for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
-      const page = await pdfDocument.getPage(pageNum)
-      const textContent = await page.getTextContent()
-      
-      for (const item of textContent.items) {
-        if ('str' in item) {
-          text += item.str + ' '
+    // Create a promise to handle the parsing
+    const parsePromise = new Promise<string>((resolve, reject) => {
+      pdfParser.on('pdfParser_dataError', (errData: any) => reject(errData.parserError))
+      pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
+        try {
+          // Extract text from all pages
+          let text = ''
+          if (pdfData.Pages) {
+            for (const page of pdfData.Pages) {
+              if (page.Texts) {
+                for (const textItem of page.Texts) {
+                  if (textItem.R) {
+                    for (const run of textItem.R) {
+                      if (run.T) {
+                        // Decode URI-encoded text
+                        text += decodeURIComponent(run.T) + ' '
+                      }
+                    }
+                  }
+                }
+                text += '\n'
+              }
+            }
+          }
+          resolve(text.trim())
+        } catch (err) {
+          reject(err)
         }
-      }
-      text += '\n'
-    }
+      })
+    })
     
-    text = text.trim()
+    // Parse the PDF buffer
+    pdfParser.parseBuffer(buffer)
+    const text = await parsePromise
 
     if (!text || text.trim().length === 0) {
       return NextResponse.json({ error: 'No text could be extracted from the PDF' }, { status: 400 })

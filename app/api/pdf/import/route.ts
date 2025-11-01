@@ -62,74 +62,121 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No text could be extracted from the PDF' }, { status: 400 })
     }
 
-    // Enhanced parsing: split into sentences and treat each as potential recommendation
+    // Enhanced parsing: Look for "Repair Recommendations" or "Recommendations" section with bullet points
     const recNumRegex = /\b\d{4}-\d{2}-\d{4}\b/
     const candidates: Array<{ title: string; description?: string; recommendation_number?: string }> = []
 
-    // First try paragraph-based approach
-    const paragraphs = text.split(/\n{2,}/).map((p: string) => p.trim()).filter(Boolean)
-
-    for (const p of paragraphs) {
-      const lines = p.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)
-      if (lines.length === 0) continue
-
-      const first = lines[0]
-      const rest = lines.slice(1).join(' ')
-
-      // Check if this is a structured recommendation
-      const containsKeyword = /recommend/i.test(p) || /recommendation/i.test(p) || /repair/i.test(p)
-      const hasRecNum = recNumRegex.test(p)
-      const numberedItem = /^\d+\.|^\([0-9]+\)|^[a-z]\)/.test(first)
-      const bulletItem = /^[-•*]\s/.test(first)
-
-      if (containsKeyword || hasRecNum || numberedItem || bulletItem) {
-        let title = first.replace(/^[-•*]\s/, '').replace(/^\d+\.\s*/, '').replace(/^\([0-9]+\)\s*/, '').replace(/^[a-z]\)\s*/, '')
-        let recommendation_number: string | undefined
-
-        const recMatch = p.match(recNumRegex)
-        if (recMatch) {
-          recommendation_number = recMatch[0]
-          title = title.replace(recNumRegex, '').trim() || title
-        }
-
-        const description = rest || undefined
-
-        if (title && title.length >= 10) {
-          candidates.push({ title, description, recommendation_number })
-        }
-      } else if (lines.length === 1 && first.length > 20 && first.length < 200) {
-        // Single-line sentence that looks like a recommendation
-        candidates.push({ title: first, description: undefined })
-      }
-    }
-
-    // If still no results, try sentence-level splitting
-    if (candidates.length === 0) {
-      const sentences = text.split(/[.!?]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 20 && s.length < 300)
+    // Split text into lines for section-based parsing
+    const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)
+    
+    // Find the section header (REPAIR RECOMMENDATIONS or RECOMMENDATIONS in bold/caps)
+    let inRecommendationsSection = false
+    let sectionStartIndex = -1
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      const upperLine = line.toUpperCase()
       
-      for (const sentence of sentences.slice(0, 20)) { // Limit to first 20 sentences
-        const recMatch = sentence.match(recNumRegex)
-        let cleanSentence = sentence
-        let recommendation_number: string | undefined
+      // Check if this line is a "Recommendations" header
+      if (
+        upperLine.includes('REPAIR RECOMMENDATION') || 
+        (upperLine.includes('RECOMMENDATION') && !upperLine.includes('REPAIR')) ||
+        upperLine === 'RECOMMENDATIONS' ||
+        upperLine === 'REPAIR RECOMMENDATIONS'
+      ) {
+        inRecommendationsSection = true
+        sectionStartIndex = i + 1
+        break
+      }
+    }
+
+    // If we found a recommendations section, extract bullet points from it
+    if (inRecommendationsSection && sectionStartIndex > 0) {
+      for (let i = sectionStartIndex; i < lines.length; i++) {
+        const line = lines[i]
         
-        if (recMatch) {
-          recommendation_number = recMatch[0]
-          cleanSentence = sentence.replace(recNumRegex, '').trim()
+        // Stop if we hit another major section header (all caps, short line)
+        if (line.length < 50 && line === line.toUpperCase() && !line.match(/^[-•*○◦▪▫]\s/)) {
+          break
         }
         
-        if (cleanSentence.length >= 15) {
-          candidates.push({ 
-            title: cleanSentence.slice(0, 200), 
-            description: cleanSentence.length > 200 ? cleanSentence.slice(200) : undefined,
-            recommendation_number 
-          })
+        // Check if this is a bullet point
+        const isBullet = /^[-•*○◦▪▫]\s/.test(line)
+        const isNumbered = /^\d+\.|^\([0-9]+\)|^[a-z]\)/.test(line)
+        
+        if (isBullet || isNumbered) {
+          // Clean up the bullet/number prefix
+          let title = line
+            .replace(/^[-•*○◦▪▫]\s+/, '')
+            .replace(/^\d+\.\s*/, '')
+            .replace(/^\([0-9]+\)\s*/, '')
+            .replace(/^[a-z]\)\s*/, '')
+            .trim()
+          
+          let recommendation_number: string | undefined
+          
+          // Extract recommendation number if present
+          const recMatch = title.match(recNumRegex)
+          if (recMatch) {
+            recommendation_number = recMatch[0]
+            title = title.replace(recNumRegex, '').trim()
+          }
+          
+          // Only add if the title is substantial
+          if (title && title.length >= 10) {
+            candidates.push({ 
+              title, 
+              description: undefined,
+              recommendation_number 
+            })
+          }
         }
       }
     }
 
-    // Final fallback
+    // Fallback: If no recommendations section found, try the old paragraph-based approach
     if (candidates.length === 0) {
-      const fallbackTitle = text.split(/\r?\n/).find((l: string) => l.trim().length > 10) || 'Imported from PDF'
+      const paragraphs = text.split(/\n{2,}/).map((p: string) => p.trim()).filter(Boolean)
+
+      for (const p of paragraphs) {
+        const pLines = p.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)
+        if (pLines.length === 0) continue
+
+        const first = pLines[0]
+        const rest = pLines.slice(1).join(' ')
+
+        // Check if this is a structured recommendation
+        const containsKeyword = /recommend/i.test(p) || /recommendation/i.test(p) || /repair/i.test(p)
+        const hasRecNum = recNumRegex.test(p)
+        const numberedItem = /^\d+\.|^\([0-9]+\)|^[a-z]\)/.test(first)
+        const bulletItem = /^[-•*○◦▪▫]\s/.test(first)
+
+        if (containsKeyword || hasRecNum || numberedItem || bulletItem) {
+          let title = first
+            .replace(/^[-•*○◦▪▫]\s+/, '')
+            .replace(/^\d+\.\s*/, '')
+            .replace(/^\([0-9]+\)\s*/, '')
+            .replace(/^[a-z]\)\s*/, '')
+          let recommendation_number: string | undefined
+
+          const recMatch = p.match(recNumRegex)
+          if (recMatch) {
+            recommendation_number = recMatch[0]
+            title = title.replace(recNumRegex, '').trim() || title
+          }
+
+          const description = rest || undefined
+
+          if (title && title.length >= 10) {
+            candidates.push({ title, description, recommendation_number })
+          }
+        }
+      }
+    }
+
+    // Final fallback if still no results
+    if (candidates.length === 0) {
+      const fallbackTitle = lines.find((l: string) => l.length > 10) || 'Imported from PDF'
       candidates.push({ title: fallbackTitle, description: text.slice(0, 2000) })
     }
 

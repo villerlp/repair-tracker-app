@@ -28,7 +28,8 @@ export async function GET() {
     if (error) throw error
 
     // Transform the data
-    const transformed = recommendations.map((rec: any) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const transformed = recommendations.map((rec: Record<string, any>) => ({
       id: rec.id,
       title: rec.title,
       description: rec.description,
@@ -36,12 +37,13 @@ export async function GET() {
       status: rec.status,
       due_date: rec.due_date,
       created_at: rec.created_at,
-      user_email: rec['auth.users'].email,
-      user_role: rec.user_profiles.role,
+      user_email: rec['auth.users']?.email,
+      user_role: rec.user_profiles?.role,
     }))
 
     return NextResponse.json(transformed)
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/app/lib/supabase";
 import RecommendationsTable from "@/app/components/RecommendationsTable";
+
+export const runtime = "edge";
 
 type Recommendation = {
   id: string;
@@ -20,22 +21,43 @@ export default function Reports() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isClient, setIsClient] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
 
   useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+
     const checkAuth = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+      try {
+        const { createBrowserClient } = await import("@supabase/ssr");
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+          router.push("/login");
+          return;
+        }
+
+        const supabase = createBrowserClient(supabaseUrl, supabaseKey);
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) {
+          router.push("/login");
+          return;
+        }
+        fetchRecommendations();
+      } catch (error) {
+        console.error("Auth check failed:", error);
         router.push("/login");
-        return;
       }
-      fetchRecommendations();
     };
     checkAuth();
-  }, [supabase, router]);
+  }, [router, isClient]);
 
   const fetchRecommendations = async () => {
     try {
@@ -43,8 +65,10 @@ export default function Reports() {
       if (!response.ok) throw new Error("Failed to fetch reports");
       const data = await response.json();
       setRecommendations(data);
-    } catch (error: any) {
-      setError(error.message);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to fetch reports";
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

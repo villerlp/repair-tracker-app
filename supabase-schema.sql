@@ -2,10 +2,12 @@
 CREATE TABLE repair_recommendations (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  recommendation_number TEXT UNIQUE,
   title TEXT NOT NULL,
   description TEXT,
   priority TEXT CHECK (priority IN ('low', 'medium', 'high', 'critical')) DEFAULT 'medium',
-  status TEXT CHECK (status IN ('pending', 'in_progress', 'completed', 'overdue')) DEFAULT 'pending',
+  status TEXT CHECK (status IN ('approved', 'not_approved', 'pending_approval', 'deferred', 'temporary_repair')) DEFAULT 'pending_approval',
+  inspection_date DATE,
   due_date DATE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

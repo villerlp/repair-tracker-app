@@ -5,8 +5,9 @@ A web application to track repair recommendations, built with React, Next.js, Su
 ## Features
 
 - User authentication (login/sign-up)
-- Add repair recommendations
+- Add repair recommendations with inspection dates
 - Dashboard with charts for data visualization
+- Export recommendations to Excel, PDF, and Google Sheets
 - Reports for managers
 - Deployed on Vercel
 
@@ -45,15 +46,21 @@ A web application to track repair recommendations, built with React, Next.js, Su
 
 4. Set up the database:
 
-   - Create tables for users, repair recommendations, etc. (refer to Supabase dashboard)
+   - Run the SQL script in `supabase-schema.sql` in your Supabase SQL Editor
+   - This creates the necessary tables and policies
 
-5. Run the development server:
+5. (Optional) Set up Google Sheets integration:
+
+   - Follow the detailed guide in `GOOGLE_SHEETS_SETUP.md`
+   - This allows exporting recommendations directly to Google Sheets
+
+6. Run the development server:
 
    ```bash
    npm run dev
    ```
 
-6. Open [http://localhost:3000](http://localhost:3000) in your browser.
+7. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Deployment
 

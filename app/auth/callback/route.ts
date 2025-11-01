@@ -7,10 +7,17 @@ export async function GET(request: Request) {
   // if "next" is in param, use it as the redirect URL
   const next = searchParams.get('next') ?? '/'
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    return NextResponse.redirect(`${origin}/login?error=auth_config`)
+  }
+
   if (code) {
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      supabaseUrl,
+      supabaseKey,
       {
         cookies: {
           getAll() {
@@ -19,10 +26,8 @@ export async function GET(request: Request) {
               return { name, value }
             }) || []
           },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              // You can set cookies here if needed
-            })
+          setAll() {
+            // You can set cookies here if needed
           },
         },
       }

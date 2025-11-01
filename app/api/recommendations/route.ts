@@ -39,8 +39,9 @@ export async function GET() {
     if (error) throw error
 
     return NextResponse.json(recommendations)
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
 
@@ -49,28 +50,63 @@ export async function POST(request: Request) {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
+      console.error('Auth error:', authError)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
+    console.log('Received body:', body)
+
+    const insertData: Record<string, unknown> = {
+      user_id: user.id,
+      title: body.title,
+      description: body.description,
+      priority: body.priority || 'medium',
+      status: body.status || 'pending_approval',
+      due_date: body.due_date,
+      inspection_date: body.inspection_date,
+      attachments: body.attachments || [],
+    }
+
+    // Try to add recommendation_number if provided and column exists
+    if (body.recommendation_number) {
+      insertData.recommendation_number = body.recommendation_number
+    }
+
+    console.log('Inserting data:', insertData)
 
     const { data, error } = await supabase
       .from('repair_recommendations')
-      .insert([{
-        user_id: user.id,
-        title: body.title,
-        description: body.description,
-        priority: body.priority || 'medium',
-        status: body.status || 'pending',
-        due_date: body.due_date,
-      }])
+      .insert([insertData])
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Database insert error:', error)
+      // If the error is about recommendation_number column not existing, try without it
+      if (error.message.includes('recommendation_number')) {
+        console.log('Retrying without recommendation_number...')
+        delete insertData.recommendation_number
+        const { data: retryData, error: retryError } = await supabase
+          .from('repair_recommendations')
+          .insert([insertData])
+          .select()
+          .single()
+        
+        if (retryError) {
+          console.error('Retry failed:', retryError)
+          return NextResponse.json({ error: retryError.message }, { status: 500 })
+        }
+        return NextResponse.json(retryData)
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
+    console.log('Successfully inserted:', data)
     return NextResponse.json(data)
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('POST /api/recommendations error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

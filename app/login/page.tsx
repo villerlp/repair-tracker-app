@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/app/lib/supabase";
+
+export const runtime = "edge";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -12,7 +13,6 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  const supabase = createClient();
   const router = useRouter();
 
   const handleViewPassword = () => {
@@ -26,6 +26,15 @@ export default function Login() {
     setMessage("");
 
     try {
+      const { createBrowserClient } = await import("@supabase/ssr");
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error("Supabase configuration missing");
+      }
+
+      const supabase = createBrowserClient(supabaseUrl, supabaseKey);
       if (isSignUp) {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
@@ -38,8 +47,10 @@ export default function Login() {
         if (error) throw error;
         router.push("/");
       }
-    } catch (error: any) {
-      setMessage(error.message);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "An error occurred";
+      setMessage(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -52,7 +63,17 @@ export default function Login() {
     }
     setLoading(true);
     setMessage("");
+
     try {
+      const { createBrowserClient } = await import("@supabase/ssr");
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error("Supabase configuration missing");
+      }
+
+      const supabase = createBrowserClient(supabaseUrl, supabaseKey);
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${
           typeof window !== "undefined" ? window.location.origin : ""
@@ -60,8 +81,10 @@ export default function Login() {
       });
       if (error) throw error;
       setMessage("Password reset email sent! Check your inbox.");
-    } catch (error: any) {
-      setMessage(error.message);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "An error occurred";
+      setMessage(errorMessage);
     } finally {
       setLoading(false);
     }

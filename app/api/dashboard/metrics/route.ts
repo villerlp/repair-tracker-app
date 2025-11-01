@@ -54,7 +54,8 @@ export async function GET() {
       completion_rate,
       total_recommendations: total_recommendations || 0,
     })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

@@ -15,24 +15,26 @@ export async function GET() {
     const month = String(now.getMonth() + 1).padStart(2, '0')
     const yearMonth = `${year}-${month}`
 
-    // Get count of recommendations for current month
-    const startOfMonth = `${year}-${month}-01T00:00:00`
-    const endOfMonth = new Date(year, now.getMonth() + 1, 0, 23, 59, 59).toISOString()
-
-    const { count, error: countError } = await supabase
+    // Find the highest existing number for current month by querying recommendation_number field
+    const { data, error: queryError } = await supabase
       .from('repair_recommendations')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', startOfMonth)
-      .lte('created_at', endOfMonth)
+      .select('recommendation_number')
+      .like('recommendation_number', `${yearMonth}-%`)
+      .order('recommendation_number', { ascending: false })
+      .limit(1)
 
-    if (countError) {
-      console.error('Error counting recommendations:', countError)
-      // If there's an error, default to 0001
-      return NextResponse.json({ recommendation_number: `${yearMonth}-0001` })
+    let nextNumber = 1
+
+    if (!queryError && data && data.length > 0) {
+      // Extract the sequence number from the last recommendation (format: YYYY-MM-####)
+      const lastNumber = data[0].recommendation_number
+      const match = lastNumber?.match(/-(\d{4})$/)
+      if (match) {
+        nextNumber = parseInt(match[1], 10) + 1
+      }
     }
 
-    const nextNumber = ((count || 0) + 1).toString().padStart(4, '0')
-    const recommendationNumber = `${yearMonth}-${nextNumber}`
+    const recommendationNumber = `${yearMonth}-${nextNumber.toString().padStart(4, '0')}`
 
     return NextResponse.json({ recommendation_number: recommendationNumber })
   } catch (error: unknown) {

@@ -87,11 +87,11 @@ async function fixDuplicateRecNumbers() {
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const yearMonth = `${year}-${month}`
 
-  // Find the highest existing number for current month
+  // Find the highest existing number across ALL recommendations (continuous numbering)
   const { data: highestRec } = await supabase
     .from('repair_recommendations')
     .select('recommendation_number')
-    .like('recommendation_number', `${yearMonth}-%`)
+    .not('recommendation_number', 'is', null)
     .order('recommendation_number', { ascending: false })
     .limit(1)
 

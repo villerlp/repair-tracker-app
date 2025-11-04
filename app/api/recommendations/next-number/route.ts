@@ -10,16 +10,17 @@ export async function GET() {
     }
 
     // Generate recommendation number in format YYYY-MM-0001
+    // The last 4 digits are continuous across all months
     const now = new Date()
     const year = now.getFullYear()
     const month = String(now.getMonth() + 1).padStart(2, '0')
     const yearMonth = `${year}-${month}`
 
-    // Find the highest existing number for current month by querying recommendation_number field
+    // Find the highest existing number across ALL recommendations (not just current month)
     const { data, error: queryError } = await supabase
       .from('repair_recommendations')
       .select('recommendation_number')
-      .like('recommendation_number', `${yearMonth}-%`)
+      .not('recommendation_number', 'is', null)
       .order('recommendation_number', { ascending: false })
       .limit(1)
 

@@ -66,7 +66,8 @@ export async function POST() {
       })
     }
 
-    // Get current year-month and find highest number
+    // Get current year-month and find highest number across ALL recommendations
+    // The last 4 digits are continuous, not reset each month
     const now = new Date()
     const year = now.getFullYear()
     const month = String(now.getMonth() + 1).padStart(2, '0')
@@ -76,7 +77,7 @@ export async function POST() {
       .from('repair_recommendations')
       .select('recommendation_number')
       .eq('user_id', user.id)
-      .like('recommendation_number', `${yearMonth}-%`)
+      .not('recommendation_number', 'is', null)
       .order('recommendation_number', { ascending: false })
       .limit(1)
 

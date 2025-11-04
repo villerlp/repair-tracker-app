@@ -18,6 +18,7 @@ type Recommendation = {
 type RecommendationsTableProps = {
   recommendations: Recommendation[];
   showAll?: boolean;
+  onDelete?: () => void;
 };
 
 type SortField = 'recommendation_number' | 'priority' | 'title' | 'status' | 'inspection_date' | 'due_date';
@@ -26,10 +27,12 @@ type SortDirection = 'asc' | 'desc';
 export default function RecommendationsTable({
   recommendations,
   showAll = false,
+  onDelete,
 }: RecommendationsTableProps) {
   const router = useRouter();
   const [sortField, setSortField] = useState<SortField>('recommendation_number');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const priorityOrder: Record<string, number> = {
     critical: 4,
@@ -44,6 +47,37 @@ export default function RecommendationsTable({
     } else {
       setSortField(field);
       setSortDirection('asc');
+    }
+  };
+
+  const handleDelete = async (id: string, title: string) => {
+    if (!confirm(`Delete recommendation: "${title}"?\n\nThis action cannot be undone.`)) {
+      return;
+    }
+
+    setDeleting(id);
+
+    try {
+      const response = await fetch(`/api/recommendations/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        alert(`Failed to delete: ${data.error || 'Unknown error'}`);
+      } else {
+        // Refresh the page or call onDelete callback
+        if (onDelete) {
+          onDelete();
+        } else {
+          router.refresh();
+        }
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('Failed to delete recommendation');
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -234,13 +268,23 @@ export default function RecommendationsTable({
                 )}
               </td>
               <td className="px-3 py-2 whitespace-nowrap text-center">
-                <button
-                  onClick={() => router.push(`/edit/${rec.id}`)}
-                  className="px-2 py-1 text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-300 hover:bg-slate-200 uppercase tracking-wide transition-colors"
-                  title="Edit recommendation"
-                >
-                  Edit
-                </button>
+                <div className="flex items-center justify-center gap-1">
+                  <button
+                    onClick={() => router.push(`/edit/${rec.id}`)}
+                    className="px-2 py-1 text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-300 hover:bg-slate-200 uppercase tracking-wide transition-colors"
+                    title="Edit recommendation"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(rec.id, rec.title)}
+                    disabled={deleting === rec.id}
+                    className="px-2 py-1 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed uppercase tracking-wide transition-colors"
+                    title="Delete recommendation"
+                  >
+                    {deleting === rec.id ? '...' : 'Delete'}
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

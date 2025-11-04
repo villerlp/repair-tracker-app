@@ -174,3 +174,68 @@ export async function PUT(
     );
   }
 }
+
+// DELETE recommendation
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json(
+        { error: "Supabase configuration missing" },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createServerClient(supabaseUrl, supabaseKey, {
+      cookies: {
+        get: (name: string) => {
+          const cookie = request.cookies.get(name);
+          return cookie?.value;
+        },
+        set: () => {},
+        remove: () => {},
+      },
+    });
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      console.error("DELETE auth error:", authError);
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    console.log("Deleting recommendation:", id, "by user:", user.id);
+
+    const { error } = await supabase
+      .from("repair_recommendations")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id); // Ensure user can only delete their own recommendations
+
+    if (error) {
+      console.error("Delete error:", error);
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
+    console.log("Deleted successfully");
+    return NextResponse.json({ success: true, message: "Recommendation deleted" });
+  } catch (error) {
+    console.error("Error deleting recommendation:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}

@@ -23,6 +23,8 @@ export default function ExtractPage() {
   const [message, setMessage] = useState("");
   const [importing, setImporting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [pastedText, setPastedText] = useState("");
+  const [showPasteMode, setShowPasteMode] = useState(false);
 
   const handleFileSelect = (selectedFile: File | null) => {
     if (!selectedFile) return;
@@ -67,6 +69,68 @@ export default function ExtractPage() {
     
     const droppedFile = e.dataTransfer.files[0];
     handleFileSelect(droppedFile);
+  };
+
+  const parsePastedText = () => {
+    if (!pastedText.trim()) {
+      setMessage("Please paste some text first");
+      setTimeout(() => setMessage(""), 3000);
+      return;
+    }
+
+    setExtracting(true);
+    setMessage("");
+
+    try {
+      // Parse text for M35-A style sections
+      const sectionPattern = /\b(M\d+\s*-\s*[A-Z])\b/gi;
+      const matches = [...pastedText.matchAll(sectionPattern)];
+      
+      if (matches.length === 0) {
+        setMessage("No section markers (like M35-A) found in pasted text");
+        setTimeout(() => setMessage(""), 5000);
+        setExtracting(false);
+        return;
+      }
+
+      const extracted: ExtractedRecommendation[] = [];
+      
+      for (let i = 0; i < matches.length; i++) {
+        const match = matches[i];
+        const section = match[1].replace(/\s+/g, '').toUpperCase();
+        const startPos = match.index || 0;
+        const endPos = i < matches.length - 1 ? (matches[i + 1].index || pastedText.length) : pastedText.length;
+        
+        const sectionText = pastedText.substring(startPos, endPos).trim();
+        const content = sectionText.replace(/^M\d+\s*-\s*[A-Z]\s*/i, '').trim();
+        
+        if (content.length > 10) {
+          // Use first 60 chars as title
+          const title = content.substring(0, 60) + (content.length > 60 ? '...' : '');
+          
+          extracted.push({
+            id: `paste-${Date.now()}-${i}`,
+            title,
+            description: `Section: ${section}\n\n${content}`,
+            priority: 'medium',
+            status: 'pending_approval',
+            dueDate: '',
+            inspectionDate: '',
+            selected: true
+          });
+        }
+      }
+
+      setRecommendations(extracted);
+      setMessage(`✓ Extracted ${extracted.length} recommendation(s) from pasted text`);
+      setTimeout(() => setMessage(""), 3000);
+    } catch (error) {
+      console.error("Parse error:", error);
+      setMessage("Failed to parse pasted text");
+      setTimeout(() => setMessage(""), 3000);
+    } finally {
+      setExtracting(false);
+    }
   };
 
   const extractRecommendations = async () => {
@@ -337,13 +401,47 @@ export default function ExtractPage() {
           </button>
         </div>
 
-        {/* Upload Section */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">
-            Step 1: Upload Document
-          </h2>
-          
-          <div
+        {/* Mode Toggle */}
+        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+          <div className="flex gap-4">
+            <button
+              onClick={() => {
+                setShowPasteMode(false);
+                setRecommendations([]);
+              }}
+              className={`flex-1 py-3 px-4 font-semibold transition-colors ${
+                !showPasteMode
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              📄 Upload File (PDF/Excel)
+            </button>
+            <button
+              onClick={() => {
+                setShowPasteMode(true);
+                setRecommendations([]);
+                setFile(null);
+              }}
+              className={`flex-1 py-3 px-4 font-semibold transition-colors ${
+                showPasteMode
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              📋 Paste Text (Easier!)
+            </button>
+          </div>
+        </div>
+
+        {!showPasteMode ? (
+          /* Upload Section */
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">
+              Step 1: Upload Document
+            </h2>
+            
+            <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -421,7 +519,47 @@ export default function ExtractPage() {
               {message}
             </div>
           )}
-        </div>
+          </div>
+        ) : (
+          /* Paste Text Section */
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">
+              Step 1: Paste Text from Your Document
+            </h2>
+            <p className="text-gray-600 mb-4">
+              💡 <strong>Tip:</strong> Open your PDF, select all text (Ctrl+A), copy (Ctrl+C), and paste below.
+            </p>
+            
+            <textarea
+              value={pastedText}
+              onChange={(e) => setPastedText(e.target.value)}
+              placeholder="Paste your document text here...&#10;&#10;Example:&#10;M35-A Cap Roof Panel Repair Cap Roof panel at four corners where cracking was observed Pending&#10;M35-A Engine Compartment Clean out water from engine compartment Complete&#10;..."
+              className="w-full h-64 p-4 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={parsePastedText}
+                disabled={extracting || !pastedText.trim()}
+                className="px-6 py-3 bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold transition-colors"
+              >
+                {extracting ? "Parsing..." : "Parse Text"}
+              </button>
+            </div>
+
+            {message && (
+              <div
+                className={`mt-4 p-3 rounded ${
+                  message.includes("Error") || message.includes("Failed") || message.includes("No section")
+                    ? "bg-red-50 text-red-700 border border-red-200"
+                    : "bg-green-50 text-green-700 border border-green-200"
+                }`}
+              >
+                {message}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Extracted Recommendations Section */}
         {recommendations.length > 0 && (

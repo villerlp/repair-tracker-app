@@ -27,8 +27,22 @@ export default function ExtractPage() {
   const handleFileSelect = (selectedFile: File | null) => {
     if (!selectedFile) return;
     
-    if (selectedFile.type !== "application/pdf") {
-      setMessage("Please select a PDF file");
+    // Accept PDF, Excel, and CSV files
+    const allowedTypes = [
+      "application/pdf",
+      "application/vnd.ms-excel", // .xls
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+      "text/csv"
+    ];
+    
+    const isAllowed = allowedTypes.includes(selectedFile.type) || 
+                      selectedFile.name.endsWith('.pdf') ||
+                      selectedFile.name.endsWith('.xlsx') ||
+                      selectedFile.name.endsWith('.xls') ||
+                      selectedFile.name.endsWith('.csv');
+    
+    if (!isAllowed) {
+      setMessage("Please select a PDF, Excel (.xlsx, .xls), or CSV file");
       setTimeout(() => setMessage(""), 3000);
       return;
     }
@@ -294,13 +308,13 @@ export default function ExtractPage() {
                 <span className="text-gray-600"> or drag and drop</span>
                 <input
                   type="file"
-                  accept="application/pdf"
+                  accept="application/pdf,.pdf,.xlsx,.xls,.csv"
                   onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
                   className="hidden"
                 />
               </label>
             </div>
-            <p className="text-sm text-gray-500">PDF files only</p>
+            <p className="text-sm text-gray-500">PDF, Excel (.xlsx, .xls), or CSV files</p>
           </div>
 
           {file && (

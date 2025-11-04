@@ -44,20 +44,36 @@ export async function POST(request: Request) {
       console.log('Parsing PDF file')
       let parseError: any = null
       
-      // Strategy 1: Try pdf-lib (most robust for modern PDFs)
+      // Strategy 1: Try unpdf (handles compressed streams well)
       try {
-        console.log('Trying pdf-lib...')
-        const { PDFDocument } = require('pdf-lib')
-        const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true })
-        const pages = pdfDoc.getPages()
-        console.log(`pdf-lib loaded: ${pages.length} pages`)
+        console.log('Trying unpdf...')
+        const { extractText } = require('unpdf')
+        const { text: extractedText } = await extractText(buffer)
         
-        // pdf-lib doesn't extract text directly, but at least we can read the structure
-        // We'll need to use a different method for text extraction
-        throw new Error('pdf-lib cannot extract text, trying next method')
-      } catch (pdfLibError) {
-        console.log('pdf-lib failed:', pdfLibError)
-        parseError = pdfLibError
+        if (extractedText && extractedText.length > 100) {
+          text = extractedText
+          console.log(`unpdf extracted text, length: ${text.length}`)
+          console.log('Sample:', text.substring(0, 200))
+        } else {
+          throw new Error('unpdf extracted insufficient text')
+        }
+      } catch (unpdfError) {
+        console.log('unpdf failed:', unpdfError)
+        parseError = unpdfError
+        
+        // Strategy 1b: Try pdf-lib to at least verify structure
+        try {
+          console.log('Trying pdf-lib...')
+          const { PDFDocument } = require('pdf-lib')
+          const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true })
+          const pages = pdfDoc.getPages()
+          console.log(`pdf-lib loaded: ${pages.length} pages`)
+          
+          // pdf-lib doesn't extract text directly
+          throw new Error('pdf-lib cannot extract text, trying next method')
+        } catch (pdfLibError) {
+          console.log('pdf-lib failed:', pdfLibError)
+        }
       }
       
       // Strategy 2: Aggressive raw text extraction
@@ -85,8 +101,11 @@ export async function POST(request: Request) {
                 .replace(/\\\\/g, '\\')
                 .trim()
               
-              // Only keep text that looks like real content (has letters and reasonable length)
-              if (text.length > 2 && /[a-zA-Z]/.test(text)) {
+              // Filter out binary garbage - must have mostly printable ASCII
+              const printableRatio = (text.match(/[\x20-\x7E]/g) || []).length / text.length
+              const hasLetters = /[a-zA-Z]{2,}/.test(text)
+              
+              if (text.length > 2 && hasLetters && printableRatio > 0.7) {
                 allTextBlocks.push(text)
               }
             }

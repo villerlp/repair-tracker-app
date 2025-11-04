@@ -15,65 +15,103 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Expect raw PDF binary in request body (Content-Type: application/pdf)
+    // Get content type from header or URL
+    const contentType = request.headers.get('content-type') || ''
+    const url = new URL(request.url)
+    const fileType = url.searchParams.get('type') || ''
+    
     const arrayBuffer = await request.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    // Try pdf-parse first (more robust), fallback to pdf2json
     let text = ''
     
-    try {
-      // Try pdf-parse first
-      const pdfParse = require('pdf-parse')
-      const data = await pdfParse(buffer)
-      text = data.text
-      console.log('Successfully parsed with pdf-parse')
-    } catch (parseError) {
-      console.log('pdf-parse failed, trying pdf2json:', parseError)
+    // Check if it's an Excel file
+    if (contentType.includes('spreadsheet') || contentType.includes('excel') || 
+        fileType.includes('xlsx') || fileType.includes('xls')) {
+      console.log('Parsing Excel file')
+      const XLSX = require('xlsx')
+      const workbook = XLSX.read(buffer, { type: 'buffer' })
       
-      // Fallback to pdf2json
-      const PDFParser = require('pdf2json')
-      const pdfParser = new PDFParser()
+      // Get the first sheet
+      const sheetName = workbook.SheetNames[0]
+      const sheet = workbook.Sheets[sheetName]
       
-      // Create a promise to handle the parsing
-      const parsePromise = new Promise<string>((resolve, reject) => {
-        pdfParser.on('pdfParser_dataError', (errData: any) => reject(errData.parserError))
-        pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
-          try {
-            // Extract text from all pages
-            let extractedText = ''
-            if (pdfData.Pages) {
-              for (const page of pdfData.Pages) {
-                if (page.Texts) {
-                  for (const textItem of page.Texts) {
-                    if (textItem.R) {
-                      for (const run of textItem.R) {
-                        if (run.T) {
-                          // Decode URI-encoded text
-                          extractedText += decodeURIComponent(run.T) + ' '
+      // Convert to text (CSV format for parsing)
+      text = XLSX.utils.sheet_to_txt(sheet)
+      console.log('Excel extracted, text length:', text.length)
+    } else {
+      // Parse as PDF
+      console.log('Parsing PDF file')
+      
+      try {
+        // Use pdfjs-dist for better compatibility
+        const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
+        
+        const loadingTask = pdfjsLib.getDocument({ data: buffer })
+        const pdf = await loadingTask.promise
+        
+        console.log(`PDF loaded: ${pdf.numPages} pages`)
+        
+        // Extract text from all pages
+        const textPromises = []
+        for (let i = 1; i <= pdf.numPages; i++) {
+          textPromises.push(
+            pdf.getPage(i).then((page: any) => {
+              return page.getTextContent().then((textContent: any) => {
+                return textContent.items.map((item: any) => item.str).join(' ')
+              })
+            })
+          )
+        }
+        
+        const pageTexts = await Promise.all(textPromises)
+        text = pageTexts.join('\n')
+        console.log('PDF text extracted, length:', text.length)
+      } catch (pdfError) {
+        console.log('pdfjs-dist failed, trying pdf2json:', pdfError)
+        
+        // Fallback to pdf2json
+        const PDFParser = require('pdf2json')
+        const pdfParser = new PDFParser()
+        
+        const parsePromise = new Promise<string>((resolve, reject) => {
+          pdfParser.on('pdfParser_dataError', (errData: any) => reject(errData.parserError))
+          pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
+            try {
+              let extractedText = ''
+              if (pdfData.Pages) {
+                for (const page of pdfData.Pages) {
+                  if (page.Texts) {
+                    for (const textItem of page.Texts) {
+                      if (textItem.R) {
+                        for (const run of textItem.R) {
+                          if (run.T) {
+                            extractedText += decodeURIComponent(run.T) + ' '
+                          }
                         }
                       }
                     }
+                    extractedText += '\n'
                   }
-                  extractedText += '\n'
                 }
               }
+              resolve(extractedText.trim())
+            } catch (err) {
+              reject(err)
             }
-            resolve(extractedText.trim())
-          } catch (err) {
-            reject(err)
-          }
+          })
         })
-      })
-      
-      // Parse the PDF buffer
-      pdfParser.parseBuffer(buffer)
-      text = await parsePromise
+        
+        pdfParser.parseBuffer(buffer)
+        text = await parsePromise
+      }
     }
 
     if (!text || text.trim().length === 0) {
-      return NextResponse.json({ error: 'No text could be extracted from the PDF' }, { status: 400 })
+      return NextResponse.json({ error: 'No text could be extracted from the file' }, { status: 400 })
     }
+    
+    console.log('Extracted text preview:', text.substring(0, 500))
 
     // Enhanced parsing: Look for M35-A style section markers in the concatenated text
     const recNumRegex = /\b\d{4}-\d{2}-\d{4}\b/
@@ -88,22 +126,28 @@ export async function POST(request: Request) {
     const candidates: Array<ImportedRec> = []
 
     // Parse M35 format: Look for section markers (M35-A, M35-B, etc.) in the text
-    // Pattern: M35-A Area/Component Action-words Status
-    const sectionPattern = /\b(M\d+-[A-Z])\s+/g
-    const statusKeywords = ['Pending', 'Complete', 'In-Progress', 'Partial', 'Approved', 'Deferred', 'In Progress']
-    const actionVerbs = ['Replace', 'Repair', 'Clean', 'Install', 'Inspect', 'Evaluate', 'Conduct', 'Perform', 'Seal', 'Tighten', 'Vacuum', 'Maintain', 'Winterization', 'Remove', 'Add', 'Check', 'Verify', 'Properly', 'Ensure']
+    // Pattern: M35-A or M35 - A or similar variations
+    const sectionPattern = /\b(M\d+\s*-\s*[A-Z])\b/gi
+    const statusKeywords = ['Pending', 'Complete', 'Completed', 'In-Progress', 'Partial', 'Approved', 'Deferred', 'In Progress']
+    const actionVerbs = ['Replace', 'Repair', 'Clean', 'Install', 'Inspect', 'Evaluate', 'Conduct', 'Perform', 'Seal', 'Tighten', 'Vacuum', 'Maintain', 'Winterization', 'Remove', 'Add', 'Check', 'Verify', 'Properly', 'Ensure', 'Fix', 'Update', 'Test', 'Monitor', 'Review']
     
     // Find all section markers and their positions
     const sectionMatches: Array<{ section: string; start: number }> = []
     let match
+    sectionPattern.lastIndex = 0 // Reset regex
     while ((match = sectionPattern.exec(text)) !== null) {
       sectionMatches.push({
-        section: match[1],
+        section: match[1].replace(/\s+/g, '').toUpperCase(), // Normalize: "M35 - A" -> "M35-A"
         start: match.index
       })
     }
     
     console.log(`Found ${sectionMatches.length} section markers`)
+    
+    if (sectionMatches.length > 0) {
+      console.log('First 5 sections:', sectionMatches.slice(0, 5).map(s => s.section))
+      console.log('Sample section text:', text.substring(sectionMatches[0].start, Math.min(sectionMatches[0].start + 200, text.length)))
+    }
     
     // Process each section to extract recommendation
     for (let i = 0; i < sectionMatches.length; i++) {
@@ -111,14 +155,17 @@ export async function POST(request: Request) {
       const next = sectionMatches[i + 1]
       
       // Extract text between this section and the next (or end of document)
-      const endPos = next ? next.start : text.length
+      const endPos = next ? next.start : Math.min(current.start + 1000, text.length) // Limit to 1000 chars if no next section
       const sectionText = text.substring(current.start, endPos).trim()
       
-      // Remove the section marker from the beginning
-      const content = sectionText.replace(/^M\d+-[A-Z]\s+/, '').trim()
+      // Remove the section marker from the beginning (handle various formats)
+      const content = sectionText.replace(/^M\d+\s*-\s*[A-Z]\s*/i, '').trim()
       
       // Skip if content is too short
-      if (content.length < 10) continue
+      if (content.length < 10) {
+        console.log(`Skipping section ${current.section}: content too short (${content.length} chars)`)
+        continue
+      }
       
       // Find status keyword at the end
       let statusText = ''

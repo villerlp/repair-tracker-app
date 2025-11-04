@@ -40,70 +40,104 @@ export async function POST(request: Request) {
       text = XLSX.utils.sheet_to_txt(sheet)
       console.log('Excel extracted, text length:', text.length)
     } else {
-      // Parse as PDF
+      // Parse as PDF - try multiple parsers
       console.log('Parsing PDF file')
+      let parseError: any = null
       
+      // Strategy 1: Try pdf-lib (most robust for modern PDFs)
       try {
-        // Use pdfjs-dist for better compatibility
-        const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
+        console.log('Trying pdf-lib...')
+        const { PDFDocument } = require('pdf-lib')
+        const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true })
+        const pages = pdfDoc.getPages()
+        console.log(`pdf-lib loaded: ${pages.length} pages`)
         
-        const loadingTask = pdfjsLib.getDocument({ data: buffer })
-        const pdf = await loadingTask.promise
+        // pdf-lib doesn't extract text directly, but at least we can read the structure
+        // We'll need to use a different method for text extraction
+        throw new Error('pdf-lib cannot extract text, trying next method')
+      } catch (pdfLibError) {
+        console.log('pdf-lib failed:', pdfLibError)
+        parseError = pdfLibError
+      }
+      
+      // Strategy 2: Try using command-line extraction via external tool
+      // For now, we'll use a workaround - treat the PDF as raw text
+      try {
+        console.log('Trying raw text extraction...')
+        // Convert buffer to string and look for readable text
+        const rawText = buffer.toString('latin1')
         
-        console.log(`PDF loaded: ${pdf.numPages} pages`)
+        // Look for text between PDF text operators (BT...ET blocks)
+        const textBlocks: string[] = []
+        const btPattern = /BT\s+([\s\S]*?)\s+ET/g
+        let match
         
-        // Extract text from all pages
-        const textPromises = []
-        for (let i = 1; i <= pdf.numPages; i++) {
-          textPromises.push(
-            pdf.getPage(i).then((page: any) => {
-              return page.getTextContent().then((textContent: any) => {
-                return textContent.items.map((item: any) => item.str).join(' ')
-              })
-            })
-          )
+        while ((match = btPattern.exec(rawText)) !== null) {
+          const block = match[1]
+          // Extract text from Tj and TJ operators
+          const tjPattern = /\((.*?)\)\s*Tj/g
+          const tjMatches = block.matchAll(tjPattern)
+          for (const tjMatch of tjMatches) {
+            let textContent = tjMatch[1]
+            // Clean up PDF escape sequences
+            textContent = textContent.replace(/\\(\d{3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)))
+            textContent = textContent.replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t')
+            textContent = textContent.replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\\/g, '\\')
+            if (textContent.trim().length > 0) {
+              textBlocks.push(textContent.trim())
+            }
+          }
         }
         
-        const pageTexts = await Promise.all(textPromises)
-        text = pageTexts.join('\n')
-        console.log('PDF text extracted, length:', text.length)
-      } catch (pdfError) {
-        console.log('pdfjs-dist failed, trying pdf2json:', pdfError)
+        if (textBlocks.length > 0) {
+          text = textBlocks.join(' ')
+          console.log(`Raw text extraction found ${textBlocks.length} text blocks, length: ${text.length}`)
+        } else {
+          throw new Error('No text blocks found in PDF')
+        }
+      } catch (rawError) {
+        console.log('Raw text extraction failed:', rawError)
         
-        // Fallback to pdf2json
-        const PDFParser = require('pdf2json')
-        const pdfParser = new PDFParser()
-        
-        const parsePromise = new Promise<string>((resolve, reject) => {
-          pdfParser.on('pdfParser_dataError', (errData: any) => reject(errData.parserError))
-          pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
-            try {
-              let extractedText = ''
-              if (pdfData.Pages) {
-                for (const page of pdfData.Pages) {
-                  if (page.Texts) {
-                    for (const textItem of page.Texts) {
-                      if (textItem.R) {
-                        for (const run of textItem.R) {
-                          if (run.T) {
-                            extractedText += decodeURIComponent(run.T) + ' '
+        // Strategy 3: Last resort - try pdf2json even though it might fail
+        try {
+          console.log('Trying pdf2json as last resort...')
+          const PDFParser = require('pdf2json')
+          const pdfParser = new PDFParser()
+          
+          const parsePromise = new Promise<string>((resolve, reject) => {
+            pdfParser.on('pdfParser_dataError', (errData: any) => reject(errData.parserError))
+            pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
+              try {
+                let extractedText = ''
+                if (pdfData.Pages) {
+                  for (const page of pdfData.Pages) {
+                    if (page.Texts) {
+                      for (const textItem of page.Texts) {
+                        if (textItem.R) {
+                          for (const run of textItem.R) {
+                            if (run.T) {
+                              extractedText += decodeURIComponent(run.T) + ' '
+                            }
                           }
                         }
                       }
+                      extractedText += '\n'
                     }
-                    extractedText += '\n'
                   }
                 }
+                resolve(extractedText.trim())
+              } catch (err) {
+                reject(err)
               }
-              resolve(extractedText.trim())
-            } catch (err) {
-              reject(err)
-            }
+            })
           })
-        })
-        
-        pdfParser.parseBuffer(buffer)
-        text = await parsePromise
+          
+          pdfParser.parseBuffer(buffer)
+          text = await parsePromise
+        } catch (pdf2jsonError) {
+          console.log('pdf2json failed:', pdf2jsonError)
+          throw new Error(`All PDF parsing methods failed. Last error: ${pdf2jsonError}`)
+        }
       }
     }
 

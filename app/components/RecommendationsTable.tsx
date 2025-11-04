@@ -279,7 +279,7 @@ export default function RecommendationsTable({
                   <button
                     onClick={() => handleDelete(rec.id, rec.title)}
                     disabled={deleting === rec.id}
-                    className="px-2 py-1 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed uppercase tracking-wide transition-colors"
+                    className="px-2 py-1 text-xs font-semibold text-white bg-gradient-to-b from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 active:from-red-700 active:to-red-900 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed uppercase tracking-wide transition-all shadow-[0_4px_0_0_rgba(127,29,29,1)] hover:shadow-[0_2px_0_0_rgba(127,29,29,1)] active:shadow-[0_1px_0_0_rgba(127,29,29,1)] hover:translate-y-[2px] active:translate-y-[3px] disabled:shadow-none disabled:translate-y-0 rounded"
                     title="Delete recommendation"
                   >
                     {deleting === rec.id ? '...' : 'Delete'}

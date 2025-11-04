@@ -19,50 +19,63 @@ export async function POST(request: Request) {
     const arrayBuffer = await request.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    // Use pdf2json which works reliably in Node.js
-    const PDFParser = require('pdf2json')
-    const pdfParser = new PDFParser()
+    // Try pdf-parse first (more robust), fallback to pdf2json
+    let text = ''
     
-    // Create a promise to handle the parsing
-    const parsePromise = new Promise<string>((resolve, reject) => {
-      pdfParser.on('pdfParser_dataError', (errData: any) => reject(errData.parserError))
-      pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
-        try {
-          // Extract text from all pages
-          let text = ''
-          if (pdfData.Pages) {
-            for (const page of pdfData.Pages) {
-              if (page.Texts) {
-                for (const textItem of page.Texts) {
-                  if (textItem.R) {
-                    for (const run of textItem.R) {
-                      if (run.T) {
-                        // Decode URI-encoded text
-                        text += decodeURIComponent(run.T) + ' '
+    try {
+      // Try pdf-parse first
+      const pdfParse = require('pdf-parse')
+      const data = await pdfParse(buffer)
+      text = data.text
+      console.log('Successfully parsed with pdf-parse')
+    } catch (parseError) {
+      console.log('pdf-parse failed, trying pdf2json:', parseError)
+      
+      // Fallback to pdf2json
+      const PDFParser = require('pdf2json')
+      const pdfParser = new PDFParser()
+      
+      // Create a promise to handle the parsing
+      const parsePromise = new Promise<string>((resolve, reject) => {
+        pdfParser.on('pdfParser_dataError', (errData: any) => reject(errData.parserError))
+        pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
+          try {
+            // Extract text from all pages
+            let extractedText = ''
+            if (pdfData.Pages) {
+              for (const page of pdfData.Pages) {
+                if (page.Texts) {
+                  for (const textItem of page.Texts) {
+                    if (textItem.R) {
+                      for (const run of textItem.R) {
+                        if (run.T) {
+                          // Decode URI-encoded text
+                          extractedText += decodeURIComponent(run.T) + ' '
+                        }
                       }
                     }
                   }
+                  extractedText += '\n'
                 }
-                text += '\n'
               }
             }
+            resolve(extractedText.trim())
+          } catch (err) {
+            reject(err)
           }
-          resolve(text.trim())
-        } catch (err) {
-          reject(err)
-        }
+        })
       })
-    })
-    
-    // Parse the PDF buffer
-    pdfParser.parseBuffer(buffer)
-    const text = await parsePromise
+      
+      // Parse the PDF buffer
+      pdfParser.parseBuffer(buffer)
+      text = await parsePromise
+    }
 
     if (!text || text.trim().length === 0) {
       return NextResponse.json({ error: 'No text could be extracted from the PDF' }, { status: 400 })
     }
 
-    // Enhanced parsing: Look for table with columns: Section (Title), Area/Component, Repair Recommendation Status, Remarks
+    // Enhanced parsing: Look for M35-A style section markers in the concatenated text
     const recNumRegex = /\b\d{4}-\d{2}-\d{4}\b/
     type ImportedRec = { 
       title: string; 
@@ -74,157 +87,114 @@ export async function POST(request: Request) {
     }
     const candidates: Array<ImportedRec> = []
 
-    // Split text into lines for parsing
-    const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)
+    // Parse M35 format: Look for section markers (M35-A, M35-B, etc.) in the text
+    // Pattern: M35-A Area/Component Action-words Status
+    const sectionPattern = /\b(M\d+-[A-Z])\s+/g
+    const statusKeywords = ['Pending', 'Complete', 'In-Progress', 'Partial', 'Approved', 'Deferred', 'In Progress']
+    const actionVerbs = ['Replace', 'Repair', 'Clean', 'Install', 'Inspect', 'Evaluate', 'Conduct', 'Perform', 'Seal', 'Tighten', 'Vacuum', 'Maintain', 'Winterization', 'Remove', 'Add', 'Check', 'Verify', 'Properly', 'Ensure']
     
-    // Try to find table header with column names
-    // Expected columns: Section, Area/Component, Repair Recommendation, Status, Remarks
-    let tableHeaderIndex = -1
-    let columnMapping: { section?: number; area?: number; repairRec?: number; status?: number; remarks?: number } = {}
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]
-      const upperLine = line.toUpperCase()
-      
-      // Look for table header row - must have Section, Area/Component, and either Repair Recommendation or Status
-      if (upperLine.includes('SECTION') &&
-          (upperLine.includes('AREA') || upperLine.includes('COMPONENT')) &&
-          (upperLine.includes('REPAIR') || upperLine.includes('RECOMMENDATION'))) {
-        tableHeaderIndex = i
-        
-        // Try to determine column positions by splitting on multiple spaces or tabs
-        const words = line.split(/\s{2,}|\t/).map(w => w.trim()).filter(Boolean)
-        console.log('Header columns found:', words)
-        
-        words.forEach((word, idx) => {
-          const upper = word.toUpperCase()
-          if (upper.includes('SECTION') && !upper.includes('REPAIR')) columnMapping.section = idx
-          if (upper.includes('AREA') || upper.includes('COMPONENT')) columnMapping.area = idx
-          if (upper.includes('REPAIR') && upper.includes('RECOMMENDATION')) columnMapping.repairRec = idx
-          if (upper === 'STATUS' || (upper.includes('STATUS') && !upper.includes('REPAIR'))) columnMapping.status = idx
-          if (upper.includes('REMARK')) columnMapping.remarks = idx
-        })
-        
-        console.log('Column mapping:', columnMapping)
-        break
-      }
+    // Find all section markers and their positions
+    const sectionMatches: Array<{ section: string; start: number }> = []
+    let match
+    while ((match = sectionPattern.exec(text)) !== null) {
+      sectionMatches.push({
+        section: match[1],
+        start: match.index
+      })
     }
-
-    // If we found a table header, parse the table rows
-    if (tableHeaderIndex >= 0) {
-      console.log('Found table header at line', tableHeaderIndex, 'Column mapping:', columnMapping)
+    
+    console.log(`Found ${sectionMatches.length} section markers`)
+    
+    // Process each section to extract recommendation
+    for (let i = 0; i < sectionMatches.length; i++) {
+      const current = sectionMatches[i]
+      const next = sectionMatches[i + 1]
       
-      // Status keywords to help identify status column
-      const statusKeywords = ['Pending', 'Complete', 'In-Progress', 'Partial', 'Approved', 'Deferred']
+      // Extract text between this section and the next (or end of document)
+      const endPos = next ? next.start : text.length
+      const sectionText = text.substring(current.start, endPos).trim()
       
-      for (let i = tableHeaderIndex + 1; i < lines.length; i++) {
-        const line = lines[i]
-        
-        // Stop at empty lines or new major sections
-        if (!line || line.length < 5) continue
-        if (line === line.toUpperCase() && line.length < 50 && !line.match(/^[M\d-]/)) {
+      // Remove the section marker from the beginning
+      const content = sectionText.replace(/^M\d+-[A-Z]\s+/, '').trim()
+      
+      // Skip if content is too short
+      if (content.length < 10) continue
+      
+      // Find status keyword at the end
+      let statusText = ''
+      let status = 'pending_approval'
+      let mainContent = content
+      
+      for (const keyword of statusKeywords) {
+        const statusRegex = new RegExp(`\\b${keyword}\\b(?:\\s+.*)?$`, 'i')
+        const statusMatch = content.match(statusRegex)
+        if (statusMatch) {
+          statusText = statusMatch[0].trim()
+          mainContent = content.substring(0, statusMatch.index).trim()
+          status = keyword.toLowerCase().replace(/[-\s]/g, '_')
           break
         }
-        
-        // Parse table row: Section Area/Component Repair-Recommendation Status Remarks
-        // Section pattern: M35-A or similar
-        const sectionMatch = line.match(/^(M\d+-[A-Z])\s+/)
-        if (!sectionMatch) continue
-        
-        const section = sectionMatch[1]
-        let remainingText = line.substring(sectionMatch[0].length).trim()
-        
-        // Extract status (look for status keywords from the end)
-        let status = 'pending_approval'
-        let statusText = ''
-        for (const keyword of statusKeywords) {
-          const statusRegex = new RegExp(`\\b${keyword}\\b(?:\\s+.*)?$`, 'i')
-          const match = remainingText.match(statusRegex)
-          if (match) {
-            statusText = match[0].trim()
-            remainingText = remainingText.substring(0, match.index).trim()
-            status = keyword
-            break
-          }
-        }
-        
-        // Now we have: Area/Component + Repair Recommendation + maybe Remarks
-        // Look for the first capital letter or long phrase as area
-        // The repair recommendation usually starts with a verb (Replace, Repair, Clean, etc.)
-        const actionVerbs = ['Replace', 'Repair', 'Clean', 'Install', 'Inspect', 'Evaluate', 'Conduct', 'Perform', 'Seal', 'Tighten', 'Vacuum', 'Maintain', 'Winterization']
-        
-        let area = ''
-        let repairRec = ''
-        let remarks = ''
-        
-        // Find where the repair recommendation starts (action verb)
-        let repairStartIndex = -1
-        for (const verb of actionVerbs) {
-          const verbIndex = remainingText.indexOf(verb)
-          if (verbIndex > 0) {
-            repairStartIndex = verbIndex
-            area = remainingText.substring(0, verbIndex).trim()
-            repairRec = remainingText.substring(verbIndex).trim()
-            break
-          }
-        }
-        
-        // If no action verb found, assume first part is area, rest is repair rec
-        if (repairStartIndex === -1) {
-          const parts = remainingText.split(/\s{2,}/)
-          if (parts.length >= 2) {
-            area = parts[0]
-            repairRec = parts.slice(1).join(' ')
-          } else {
-            repairRec = remainingText
-          }
-        }
-        
-        // Extract recommendation number if present
-        let recommendation_number: string | undefined
-        const recMatch = line.match(recNumRegex)
-        if (recMatch) {
-          recommendation_number = recMatch[0]
-        }
-        
-        // Extract title: Use first 3-4 words from Repair Recommendation
-        let title = ''
-        if (repairRec) {
-          const words = repairRec.split(/\s+/)
-          const titleWords = []
-          for (let j = 0; j < Math.min(4, words.length); j++) {
-            if (titleWords.join(' ').length + words[j].length > 60) break
-            titleWords.push(words[j])
-          }
-          title = titleWords.join(' ')
-        }
-        
-        // Fallback to section if no good title
-        if (!title || title.length < 3) {
-          title = `${section} - ${area || 'Recommendation'}`.substring(0, 60)
-        }
-        
-        // Build description
-        const descParts = []
-        descParts.push(`Section: ${section}`)
-        if (area) descParts.push(`Area/Component: ${area}`)
-        if (repairRec) descParts.push(`Repair Recommendation: ${repairRec}`)
-        if (statusText && statusText !== status) descParts.push(`Status: ${statusText}`)
-        if (remarks) descParts.push(`Remarks: ${remarks}`)
-        
-        candidates.push({
-          title,
-          description: descParts.join('\n'),
-          recommendation_number,
-          area,
-          status: statusText.toLowerCase().replace(/[-\s]/g, '_') || 'pending_approval',
-          remarks
-        })
       }
+      
+      // Try to split into Area/Component and Repair Recommendation
+      let area = ''
+      let repairRec = mainContent
+      
+      // Find the first action verb
+      for (const verb of actionVerbs) {
+        const verbRegex = new RegExp(`\\b${verb}\\b`, 'i')
+        const verbMatch = mainContent.match(verbRegex)
+        if (verbMatch && verbMatch.index && verbMatch.index > 0) {
+          area = mainContent.substring(0, verbMatch.index).trim()
+          repairRec = mainContent.substring(verbMatch.index).trim()
+          break
+        }
+      }
+      
+      // Create title from first few words of repair recommendation or area
+      let title = ''
+      if (repairRec) {
+        const words = repairRec.split(/\s+/).slice(0, 5)
+        title = words.join(' ')
+        if (title.length > 60) {
+          title = title.substring(0, 57) + '...'
+        }
+      } else if (area) {
+        title = area.substring(0, 60)
+      }
+      
+      // Fallback title
+      if (!title || title.length < 3) {
+        title = `${current.section} Recommendation`
+      }
+      
+      // Build description
+      const descParts = []
+      descParts.push(`Section: ${current.section}`)
+      if (area && area !== title) descParts.push(`Area/Component: ${area}`)
+      if (repairRec) descParts.push(`Repair Recommendation: ${repairRec}`)
+      if (statusText) descParts.push(`Status: ${statusText}`)
+      
+      // Look for recommendation number
+      let recommendation_number: string | undefined
+      const recMatch = sectionText.match(recNumRegex)
+      if (recMatch) {
+        recommendation_number = recMatch[0]
+      }
+      
+      candidates.push({
+        title,
+        description: descParts.join('\n'),
+        recommendation_number,
+        area,
+        status,
+        remarks: ''
+      })
     }
 
     // Fallback 1: Look for "Recommendations" section with bullet points
     if (candidates.length === 0) {
+      const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)
       let inRecommendationsSection = false
       let sectionStartIndex = -1
       
@@ -318,6 +288,7 @@ export async function POST(request: Request) {
 
     // Final fallback if still no results
     if (candidates.length === 0) {
+      const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)
       const fallbackTitle = lines.find((l: string) => l.length > 10) || 'Imported from PDF'
       candidates.push({ title: fallbackTitle, description: text.slice(0, 2000) })
     }

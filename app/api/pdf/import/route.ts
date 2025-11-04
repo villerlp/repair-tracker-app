@@ -78,28 +78,34 @@ export async function POST(request: Request) {
     const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)
     
     // Try to find table header with column names
+    // Expected columns: Section, Area/Component, Repair Recommendation, Status, Remarks
     let tableHeaderIndex = -1
-    let columnMapping: { section?: number; area?: number; status?: number; remarks?: number } = {}
+    let columnMapping: { section?: number; area?: number; repairRec?: number; status?: number; remarks?: number } = {}
     
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
       const upperLine = line.toUpperCase()
       
-      // Look for table header row with column names
-      if ((upperLine.includes('SECTION') || upperLine.includes('TITLE')) &&
+      // Look for table header row - must have Section, Area/Component, and either Repair Recommendation or Status
+      if (upperLine.includes('SECTION') &&
           (upperLine.includes('AREA') || upperLine.includes('COMPONENT')) &&
-          (upperLine.includes('STATUS') || upperLine.includes('RECOMMENDATION'))) {
+          (upperLine.includes('REPAIR') || upperLine.includes('RECOMMENDATION'))) {
         tableHeaderIndex = i
         
-        // Try to determine column positions (simple approach - look for keywords)
+        // Try to determine column positions by splitting on multiple spaces or tabs
         const words = line.split(/\s{2,}|\t/).map(w => w.trim()).filter(Boolean)
+        console.log('Header columns found:', words)
+        
         words.forEach((word, idx) => {
           const upper = word.toUpperCase()
-          if (upper.includes('SECTION') || upper.includes('TITLE')) columnMapping.section = idx
+          if (upper.includes('SECTION') && !upper.includes('REPAIR')) columnMapping.section = idx
           if (upper.includes('AREA') || upper.includes('COMPONENT')) columnMapping.area = idx
-          if (upper.includes('STATUS')) columnMapping.status = idx
+          if (upper.includes('REPAIR') && upper.includes('RECOMMENDATION')) columnMapping.repairRec = idx
+          if (upper === 'STATUS' || (upper.includes('STATUS') && !upper.includes('REPAIR'))) columnMapping.status = idx
           if (upper.includes('REMARK')) columnMapping.remarks = idx
         })
+        
+        console.log('Column mapping:', columnMapping)
         break
       }
     }
@@ -120,11 +126,12 @@ export async function POST(request: Request) {
         // Split by multiple spaces or tabs (common in PDFs)
         const cells = line.split(/\s{2,}|\t/).map(c => c.trim()).filter(Boolean)
         
-        if (cells.length >= 2) {
-          const title = columnMapping.section !== undefined ? cells[columnMapping.section] : cells[0]
+        if (cells.length >= 3) {
+          const section = columnMapping.section !== undefined ? cells[columnMapping.section] : cells[0]
           const area = columnMapping.area !== undefined ? cells[columnMapping.area] : cells[1]
-          const status = columnMapping.status !== undefined ? cells[columnMapping.status] : (cells[2] || undefined)
-          const remarks = columnMapping.remarks !== undefined ? cells[columnMapping.remarks] : (cells[3] || undefined)
+          const repairRec = columnMapping.repairRec !== undefined ? cells[columnMapping.repairRec] : cells[2]
+          const status = columnMapping.status !== undefined ? cells[columnMapping.status] : (cells[3] || undefined)
+          const remarks = columnMapping.remarks !== undefined ? cells[columnMapping.remarks] : (cells[4] || undefined)
           
           let recommendation_number: string | undefined
           const recMatch = line.match(recNumRegex)
@@ -132,9 +139,33 @@ export async function POST(request: Request) {
             recommendation_number = recMatch[0]
           }
           
-          // Build description from area and remarks
+          // Extract title: Use first 3-4 words from Repair Recommendation column
+          let title = ''
+          if (repairRec) {
+            const words = repairRec.split(/\s+/)
+            // Take first 3-4 words (or up to 60 characters)
+            let wordCount = 0
+            let charCount = 0
+            const titleWords = []
+            for (const word of words) {
+              if (wordCount >= 4 || charCount + word.length > 60) break
+              titleWords.push(word)
+              wordCount++
+              charCount += word.length + 1
+            }
+            title = titleWords.join(' ')
+          }
+          
+          // If no title from repairRec, try section
+          if (!title || title.length < 3) {
+            title = section || 'Recommendation'
+          }
+          
+          // Build description with full repair recommendation text, section, area, and remarks
           const descParts = []
-          if (area && area !== title) descParts.push(`Area/Component: ${area}`)
+          if (section && section !== title) descParts.push(`Section: ${section}`)
+          if (area) descParts.push(`Area/Component: ${area}`)
+          if (repairRec && repairRec !== title) descParts.push(`Repair Recommendation: ${repairRec}`)
           if (remarks) descParts.push(`Remarks: ${remarks}`)
           
           if (title && title.length >= 3) {

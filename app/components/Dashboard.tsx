@@ -629,6 +629,12 @@ export default function Dashboard() {
             >
               Add Recommendation
             </Link>
+            <Link 
+              href="/extract"
+              className="btn btn-primary px-2 py-2 text-xs bg-blue-600 text-white hover:bg-blue-700 w-full uppercase tracking-wide font-semibold transition-colors text-center"
+            >
+              Extract from PDF
+            </Link>
             {userRole && (
               <button
                 onClick={() => {

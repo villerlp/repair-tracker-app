@@ -534,7 +534,7 @@ export default function ExtractPage() {
               value={pastedText}
               onChange={(e) => setPastedText(e.target.value)}
               placeholder="Paste your document text here...&#10;&#10;Example:&#10;M35-A Cap Roof Panel Repair Cap Roof panel at four corners where cracking was observed Pending&#10;M35-A Engine Compartment Clean out water from engine compartment Complete&#10;..."
-              className="w-full h-64 p-4 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full h-64 p-4 border border-gray-300 rounded-lg font-mono text-sm text-black placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             
             <div className="mt-4 flex justify-end">

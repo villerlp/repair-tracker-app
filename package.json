@@ -23,6 +23,7 @@
     "next": "16.0.1",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",
+    "pdf-text-extract": "^1.5.0",
     "pdf2json": "^4.0.0",
     "pdfjs-dist": "^5.4.394",
     "react": "19.2.0",

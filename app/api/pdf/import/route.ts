@@ -60,43 +60,61 @@ export async function POST(request: Request) {
         parseError = pdfLibError
       }
       
-      // Strategy 2: Try using command-line extraction via external tool
-      // For now, we'll use a workaround - treat the PDF as raw text
+      // Strategy 2: Aggressive raw text extraction
       try {
-        console.log('Trying raw text extraction...')
-        // Convert buffer to string and look for readable text
-        const rawText = buffer.toString('latin1')
+        console.log('Trying aggressive text extraction...')
         
-        // Look for text between PDF text operators (BT...ET blocks)
-        const textBlocks: string[] = []
-        const btPattern = /BT\s+([\s\S]*?)\s+ET/g
-        let match
+        // Try multiple encodings and patterns
+        const encodings = ['utf8', 'latin1', 'ascii']
+        const allTextBlocks: string[] = []
         
-        while ((match = btPattern.exec(rawText)) !== null) {
-          const block = match[1]
-          // Extract text from Tj and TJ operators
-          const tjPattern = /\((.*?)\)\s*Tj/g
-          const tjMatches = block.matchAll(tjPattern)
-          for (const tjMatch of tjMatches) {
-            let textContent = tjMatch[1]
-            // Clean up PDF escape sequences
-            textContent = textContent.replace(/\\(\d{3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)))
-            textContent = textContent.replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t')
-            textContent = textContent.replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\\/g, '\\')
-            if (textContent.trim().length > 0) {
-              textBlocks.push(textContent.trim())
+        for (const encoding of encodings) {
+          try {
+            const rawText = buffer.toString(encoding as BufferEncoding)
+            
+            // Method 1: Look for text between parentheses (PDF text strings)
+            const parenPattern = /\(([^)]{3,}?)\)/g
+            let match
+            while ((match = parenPattern.exec(rawText)) !== null) {
+              const text = match[1]
+                .replace(/\\n/g, ' ')
+                .replace(/\\r/g, ' ')
+                .replace(/\\t/g, ' ')
+                .replace(/\\\(/g, '(')
+                .replace(/\\\)/g, ')')
+                .replace(/\\\\/g, '\\')
+                .trim()
+              
+              // Only keep text that looks like real content (has letters and reasonable length)
+              if (text.length > 2 && /[a-zA-Z]/.test(text)) {
+                allTextBlocks.push(text)
+              }
             }
+            
+            // Method 2: Look for readable ASCII sequences
+            const readablePattern = /([A-Z][a-zA-Z0-9\s\-,.:;()]{10,})/g
+            while ((match = readablePattern.exec(rawText)) !== null) {
+              const text = match[1].trim()
+              if (text.length > 10 && !allTextBlocks.includes(text)) {
+                allTextBlocks.push(text)
+              }
+            }
+          } catch (encErr) {
+            console.log(`Encoding ${encoding} failed:`, encErr)
           }
         }
         
-        if (textBlocks.length > 0) {
-          text = textBlocks.join(' ')
-          console.log(`Raw text extraction found ${textBlocks.length} text blocks, length: ${text.length}`)
+        // Remove duplicates and join
+        const uniqueBlocks = Array.from(new Set(allTextBlocks))
+        if (uniqueBlocks.length > 0) {
+          text = uniqueBlocks.join(' ')
+          console.log(`Aggressive extraction found ${uniqueBlocks.length} text blocks, length: ${text.length}`)
+          console.log('Sample text:', text.substring(0, 200))
         } else {
-          throw new Error('No text blocks found in PDF')
+          throw new Error('No readable text found in PDF')
         }
       } catch (rawError) {
-        console.log('Raw text extraction failed:', rawError)
+        console.log('Aggressive text extraction failed:', rawError)
         
         // Strategy 3: Last resort - try pdf2json even though it might fail
         try {

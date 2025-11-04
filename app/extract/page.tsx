@@ -120,6 +120,52 @@ export default function ExtractPage() {
     setRecommendations(recs => recs.filter(rec => rec.id !== id));
   };
 
+  const addSingleRecommendation = async (rec: ExtractedRecommendation) => {
+    setImporting(true);
+    setMessage("");
+
+    try {
+      // Get next recommendation number
+      const numberResponse = await fetch("/api/recommendations/next-number");
+      let recNumber = undefined;
+      if (numberResponse.ok) {
+        const numberData = await numberResponse.json();
+        recNumber = numberData.recommendation_number;
+      }
+
+      const response = await fetch("/api/recommendations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recommendation_number: recNumber,
+          title: rec.title,
+          description: rec.description,
+          priority: rec.priority,
+          status: rec.status,
+          due_date: rec.dueDate || null,
+          inspection_date: rec.inspectionDate || null,
+        }),
+      });
+
+      if (response.ok) {
+        setMessage(`✓ Added: ${rec.title.substring(0, 50)}...`);
+        // Remove from list after successful add
+        setRecommendations(recs => recs.filter(r => r.id !== rec.id));
+        setTimeout(() => setMessage(""), 3000);
+      } else {
+        const data = await response.json();
+        setMessage(`❌ Failed to add: ${data.error || 'Unknown error'}`);
+        setTimeout(() => setMessage(""), 5000);
+      }
+    } catch (error) {
+      console.error("Add error:", error);
+      setMessage("Failed to add recommendation");
+      setTimeout(() => setMessage(""), 3000);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const importSelected = async () => {
     const selected = recommendations.filter(rec => rec.selected);
     
@@ -321,152 +367,105 @@ export default function ExtractPage() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              {recommendations.map((rec, index) => (
-                <div
-                  key={rec.id}
-                  className={`border-2 rounded-lg p-4 transition-all ${
-                    rec.selected
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-gray-200 bg-white"
-                  }`}
-                >
-                  <div className="flex items-start gap-4">
-                    {/* Checkbox */}
-                    <div className="pt-1">
-                      <input
-                        type="checkbox"
-                        checked={rec.selected}
-                        onChange={() => toggleSelection(rec.id)}
-                        className="w-5 h-5 text-blue-600 cursor-pointer"
-                      />
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 bg-gray-800 text-white text-xs font-bold rounded">
-                          #{index + 1}
-                        </span>
-                        {rec.recommendation_number && (
-                          <span className="px-2 py-1 bg-blue-600 text-white text-xs font-mono font-semibold rounded">
-                            {rec.recommendation_number}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Title */}
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">
-                          TITLE
-                        </label>
+            {/* Table View */}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 border border-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      #
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Title
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Description
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Priority
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {recommendations.map((rec, index) => (
+                    <tr key={rec.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        {index + 1}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-900">
                         <input
                           type="text"
                           value={rec.title}
-                          onChange={(e) =>
-                            updateRecommendation(rec.id, "title", e.target.value)
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-black focus:outline-none focus:border-blue-500"
+                          onChange={(e) => updateRecommendation(rec.id, "title", e.target.value)}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-black focus:outline-none focus:border-blue-500"
                         />
-                      </div>
-
-                      {/* Description */}
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">
-                          DESCRIPTION
-                        </label>
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-700">
                         <textarea
                           value={rec.description}
-                          onChange={(e) =>
-                            updateRecommendation(rec.id, "description", e.target.value)
-                          }
-                          rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-black focus:outline-none focus:border-blue-500"
+                          onChange={(e) => updateRecommendation(rec.id, "description", e.target.value)}
+                          rows={2}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-black focus:outline-none focus:border-blue-500"
                         />
-                      </div>
-
-                      {/* Priority and Status */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">
-                            PRIORITY
-                          </label>
-                          <select
-                            value={rec.priority}
-                            onChange={(e) =>
-                              updateRecommendation(rec.id, "priority", e.target.value)
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-black focus:outline-none focus:border-blue-500"
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <select
+                          value={rec.priority}
+                          onChange={(e) => updateRecommendation(rec.id, "priority", e.target.value)}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-black focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High</option>
+                          <option value="critical">Critical</option>
+                        </select>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <select
+                          value={rec.status}
+                          onChange={(e) => updateRecommendation(rec.id, "status", e.target.value)}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-black focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="pending_approval">Pending</option>
+                          <option value="approved">Approved</option>
+                          <option value="not_approved">Not Approved</option>
+                          <option value="deferred">Deferred</option>
+                          <option value="temporary_repair">Temporary</option>
+                        </select>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => addSingleRecommendation(rec)}
+                            disabled={importing}
+                            className="px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-b from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 active:from-green-700 active:to-green-900 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed shadow-[0_3px_0_0_rgba(21,128,61,1)] hover:shadow-[0_1px_0_0_rgba(21,128,61,1)] active:shadow-[0_0px_0_0_rgba(21,128,61,1)] hover:translate-y-[2px] active:translate-y-[3px] disabled:shadow-none disabled:translate-y-0 transition-all rounded uppercase tracking-wide"
+                            title="Add this recommendation"
                           >
-                            <option value="low">Low</option>
-                            <option value="medium">Medium</option>
-                            <option value="high">High</option>
-                            <option value="critical">Critical</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">
-                            STATUS
-                          </label>
-                          <select
-                            value={rec.status}
-                            onChange={(e) =>
-                              updateRecommendation(rec.id, "status", e.target.value)
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-black focus:outline-none focus:border-blue-500"
+                            Add
+                          </button>
+                          <button
+                            onClick={() => deleteRecommendation(rec.id)}
+                            disabled={importing}
+                            className="px-2 py-1.5 text-xs font-semibold text-white bg-gradient-to-b from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 active:from-red-700 active:to-red-900 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed shadow-[0_3px_0_0_rgba(127,29,29,1)] hover:shadow-[0_1px_0_0_rgba(127,29,29,1)] active:shadow-[0_0px_0_0_rgba(127,29,29,1)] hover:translate-y-[2px] active:translate-y-[3px] disabled:shadow-none disabled:translate-y-0 transition-all rounded uppercase tracking-wide"
+                            title="Remove from list"
                           >
-                            <option value="pending_approval">Pending Approval</option>
-                            <option value="approved">Approved</option>
-                            <option value="not_approved">Not Approved</option>
-                            <option value="deferred">Deferred</option>
-                            <option value="temporary_repair">Temporary Repair</option>
-                          </select>
+                            Remove
+                          </button>
                         </div>
-                      </div>
-
-                      {/* Dates */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">
-                            INSPECTION DATE
-                          </label>
-                          <input
-                            type="date"
-                            value={rec.inspectionDate}
-                            onChange={(e) =>
-                              updateRecommendation(rec.id, "inspectionDate", e.target.value)
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-black focus:outline-none focus:border-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">
-                            DUE DATE
-                          </label>
-                          <input
-                            type="date"
-                            value={rec.dueDate}
-                            onChange={(e) =>
-                              updateRecommendation(rec.id, "dueDate", e.target.value)
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-black focus:outline-none focus:border-blue-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Delete Button */}
-                    <button
-                      onClick={() => deleteRecommendation(rec.id)}
-                      className="px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-b from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 active:from-red-700 active:to-red-900 shadow-[0_4px_0_0_rgba(127,29,29,1)] hover:shadow-[0_2px_0_0_rgba(127,29,29,1)] active:shadow-[0_1px_0_0_rgba(127,29,29,1)] hover:translate-y-[2px] active:translate-y-[3px] transition-all rounded uppercase tracking-wide"
-                      title="Remove from list"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+
+
           </div>
         )}
       </div>

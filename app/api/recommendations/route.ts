@@ -70,6 +70,24 @@ export async function POST(request: Request) {
 
     // Try to add recommendation_number if provided and column exists
     if (body.recommendation_number) {
+      // Check if this recommendation number already exists
+      const { data: existing, error: checkError } = await supabase
+        .from('repair_recommendations')
+        .select('id, recommendation_number')
+        .eq('recommendation_number', body.recommendation_number)
+        .maybeSingle()
+
+      if (checkError) {
+        console.error('Error checking for duplicate rec #:', checkError)
+      }
+
+      if (existing) {
+        return NextResponse.json(
+          { error: `Recommendation number ${body.recommendation_number} is already in use. Please use a different number.` },
+          { status: 409 }
+        )
+      }
+
       insertData.recommendation_number = body.recommendation_number
     }
 

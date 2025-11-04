@@ -127,6 +127,25 @@ export async function PUT(
 
     // Only include recommendation_number if provided
     if (recommendation_number) {
+      // Check if this recommendation number already exists (excluding current record)
+      const { data: existing, error: checkError } = await supabase
+        .from("repair_recommendations")
+        .select("id, recommendation_number")
+        .eq("recommendation_number", recommendation_number)
+        .neq("id", id)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error("Error checking for duplicate rec #:", checkError);
+      }
+
+      if (existing) {
+        return NextResponse.json(
+          { error: `Recommendation number ${recommendation_number} is already in use. Please use a different number.` },
+          { status: 409 }
+        );
+      }
+
       updateData.recommendation_number = recommendation_number;
     }
 

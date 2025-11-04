@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Doughnut, Bar } from "react-chartjs-2";
+import { Doughnut } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   ArcElement,
@@ -482,81 +482,6 @@ export default function Dashboard() {
     }
   };
 
-  // Priority bar chart data
-  const priorityBarData = {
-    labels: ['Critical', 'High', 'Medium', 'Low'],
-    datasets: [
-      {
-        label: 'Recommendations by Priority',
-        data: [
-          recommendations.filter(r => r.priority === 'critical').length,
-          recommendations.filter(r => r.priority === 'high').length,
-          recommendations.filter(r => r.priority === 'medium').length,
-          recommendations.filter(r => r.priority === 'low').length,
-        ],
-        backgroundColor: [
-          '#dc2626', // Critical - Red
-          '#f59e0b', // High - Orange
-          '#3b82f6', // Medium - Blue
-          '#10b981', // Low - Green
-        ],
-        borderColor: [
-          '#b91c1c',
-          '#d97706',
-          '#2563eb',
-          '#059669',
-        ],
-        borderWidth: 1,
-      },
-    ],
-  };
-
-  const priorityBarOptions = {
-    maintainAspectRatio: false,
-    responsive: true,
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        callbacks: {
-          label: function(context: any) {
-            const value = context.parsed.y || 0;
-            const total = priorityBarData.datasets[0].data.reduce((a, b) => a + b, 0);
-            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
-            return `${value} recommendations (${percentage}%)`;
-          }
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          stepSize: 1,
-        },
-        title: {
-          display: true,
-          text: 'Number of Recommendations',
-          font: {
-            size: 11,
-            weight: 'bold' as const,
-          },
-        },
-      },
-      x: {
-        title: {
-          display: true,
-          text: 'Priority Level',
-          font: {
-            size: 11,
-            weight: 'bold' as const,
-          },
-        },
-      },
-    },
-  };
-
   return (
     <div className="p-6 bg-slate-50 min-h-screen">
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
@@ -769,16 +694,6 @@ export default function Dashboard() {
               {googlesheetsMessage}
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Priority Bar Chart */}
-      <div className="bg-white border border-slate-300 shadow-sm p-4 mb-4">
-        <h3 className="text-lg font-semibold mb-4 text-slate-800 uppercase tracking-tight">
-          Recommendations by Priority Level
-        </h3>
-        <div className="h-80">
-          <Bar data={priorityBarData} options={priorityBarOptions} />
         </div>
       </div>
 

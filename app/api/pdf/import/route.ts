@@ -36,9 +36,17 @@ export async function POST(request: Request) {
       const sheetName = workbook.SheetNames[0]
       const sheet = workbook.Sheets[sheetName]
       
-      // Convert to text (CSV format for parsing)
-      text = XLSX.utils.sheet_to_txt(sheet)
+      // Convert to JSON to preserve structure
+      const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+      console.log(`Excel has ${jsonData.length} rows`)
+      
+      // Convert rows to text with newlines to help section detection
+      text = jsonData.map((row: any) => {
+        return Array.isArray(row) ? row.join(' ') : String(row)
+      }).join('\n')
+      
       console.log('Excel extracted, text length:', text.length)
+      console.log('Excel preview:', text.substring(0, 500))
     } else {
       // Parse as PDF - try multiple parsers
       console.log('Parsing PDF file')
@@ -216,7 +224,7 @@ export async function POST(request: Request) {
     console.log(`Found ${sectionMatches.length} section markers`)
     
     if (sectionMatches.length > 0) {
-      console.log('First 5 sections:', sectionMatches.slice(0, 5).map(s => s.section))
+      console.log('First 10 sections:', sectionMatches.slice(0, 10).map(s => `${s.section}@${s.start}`))
       console.log('Sample section text:', text.substring(sectionMatches[0].start, Math.min(sectionMatches[0].start + 200, text.length)))
     }
     
@@ -226,17 +234,21 @@ export async function POST(request: Request) {
       const next = sectionMatches[i + 1]
       
       // Extract text between this section and the next (or end of document)
-      const endPos = next ? next.start : Math.min(current.start + 1000, text.length) // Limit to 1000 chars if no next section
+      const endPos = next ? next.start : text.length // Use full text if last section
       const sectionText = text.substring(current.start, endPos).trim()
+      
+      console.log(`Processing section ${i + 1}/${sectionMatches.length}: ${current.section}, text length: ${sectionText.length}`)
       
       // Remove the section marker from the beginning (handle various formats)
       const content = sectionText.replace(/^M\d+\s*-\s*[A-Z]\s*/i, '').trim()
       
       // Skip if content is too short
       if (content.length < 10) {
-        console.log(`Skipping section ${current.section}: content too short (${content.length} chars)`)
+        console.log(`  -> Skipping: content too short (${content.length} chars)`)
         continue
       }
+      
+      console.log(`  -> Content preview: ${content.substring(0, 100)}`)
       
       // Find status keyword at the end
       let statusText = ''
@@ -435,6 +447,11 @@ export async function POST(request: Request) {
       inspection_date: null,
       recommendation_number: c.recommendation_number, // May be undefined, will be generated on insert
     }))
+
+    console.log(`✅ Returning ${records.length} recommendations`)
+    if (records.length > 0) {
+      console.log('First 3 titles:', records.slice(0, 3).map(r => r.title))
+    }
 
     return NextResponse.json({ success: true, imported: records.length, records })
   } catch (err: unknown) {

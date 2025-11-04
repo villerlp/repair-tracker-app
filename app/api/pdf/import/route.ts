@@ -114,71 +114,112 @@ export async function POST(request: Request) {
     if (tableHeaderIndex >= 0) {
       console.log('Found table header at line', tableHeaderIndex, 'Column mapping:', columnMapping)
       
+      // Status keywords to help identify status column
+      const statusKeywords = ['Pending', 'Complete', 'In-Progress', 'Partial', 'Approved', 'Deferred']
+      
       for (let i = tableHeaderIndex + 1; i < lines.length; i++) {
         const line = lines[i]
         
-        // Stop at empty lines or new sections
+        // Stop at empty lines or new major sections
         if (!line || line.length < 5) continue
-        if (line === line.toUpperCase() && line.length < 50 && !line.match(/^[-•*○◦▪▫\d]/)) {
+        if (line === line.toUpperCase() && line.length < 50 && !line.match(/^[M\d-]/)) {
           break
         }
         
-        // Split by multiple spaces or tabs (common in PDFs)
-        const cells = line.split(/\s{2,}|\t/).map(c => c.trim()).filter(Boolean)
+        // Parse table row: Section Area/Component Repair-Recommendation Status Remarks
+        // Section pattern: M35-A or similar
+        const sectionMatch = line.match(/^(M\d+-[A-Z])\s+/)
+        if (!sectionMatch) continue
         
-        if (cells.length >= 3) {
-          const section = columnMapping.section !== undefined ? cells[columnMapping.section] : cells[0]
-          const area = columnMapping.area !== undefined ? cells[columnMapping.area] : cells[1]
-          const repairRec = columnMapping.repairRec !== undefined ? cells[columnMapping.repairRec] : cells[2]
-          const status = columnMapping.status !== undefined ? cells[columnMapping.status] : (cells[3] || undefined)
-          const remarks = columnMapping.remarks !== undefined ? cells[columnMapping.remarks] : (cells[4] || undefined)
-          
-          let recommendation_number: string | undefined
-          const recMatch = line.match(recNumRegex)
-          if (recMatch) {
-            recommendation_number = recMatch[0]
-          }
-          
-          // Extract title: Use first 3-4 words from Repair Recommendation column
-          let title = ''
-          if (repairRec) {
-            const words = repairRec.split(/\s+/)
-            // Take first 3-4 words (or up to 60 characters)
-            let wordCount = 0
-            let charCount = 0
-            const titleWords = []
-            for (const word of words) {
-              if (wordCount >= 4 || charCount + word.length > 60) break
-              titleWords.push(word)
-              wordCount++
-              charCount += word.length + 1
-            }
-            title = titleWords.join(' ')
-          }
-          
-          // If no title from repairRec, try section
-          if (!title || title.length < 3) {
-            title = section || 'Recommendation'
-          }
-          
-          // Build description with full repair recommendation text, section, area, and remarks
-          const descParts = []
-          if (section && section !== title) descParts.push(`Section: ${section}`)
-          if (area) descParts.push(`Area/Component: ${area}`)
-          if (repairRec && repairRec !== title) descParts.push(`Repair Recommendation: ${repairRec}`)
-          if (remarks) descParts.push(`Remarks: ${remarks}`)
-          
-          if (title && title.length >= 3) {
-            candidates.push({
-              title,
-              description: descParts.length > 0 ? descParts.join('\n') : undefined,
-              recommendation_number,
-              area,
-              status,
-              remarks
-            })
+        const section = sectionMatch[1]
+        let remainingText = line.substring(sectionMatch[0].length).trim()
+        
+        // Extract status (look for status keywords from the end)
+        let status = 'pending_approval'
+        let statusText = ''
+        for (const keyword of statusKeywords) {
+          const statusRegex = new RegExp(`\\b${keyword}\\b(?:\\s+.*)?$`, 'i')
+          const match = remainingText.match(statusRegex)
+          if (match) {
+            statusText = match[0].trim()
+            remainingText = remainingText.substring(0, match.index).trim()
+            status = keyword
+            break
           }
         }
+        
+        // Now we have: Area/Component + Repair Recommendation + maybe Remarks
+        // Look for the first capital letter or long phrase as area
+        // The repair recommendation usually starts with a verb (Replace, Repair, Clean, etc.)
+        const actionVerbs = ['Replace', 'Repair', 'Clean', 'Install', 'Inspect', 'Evaluate', 'Conduct', 'Perform', 'Seal', 'Tighten', 'Vacuum', 'Maintain', 'Winterization']
+        
+        let area = ''
+        let repairRec = ''
+        let remarks = ''
+        
+        // Find where the repair recommendation starts (action verb)
+        let repairStartIndex = -1
+        for (const verb of actionVerbs) {
+          const verbIndex = remainingText.indexOf(verb)
+          if (verbIndex > 0) {
+            repairStartIndex = verbIndex
+            area = remainingText.substring(0, verbIndex).trim()
+            repairRec = remainingText.substring(verbIndex).trim()
+            break
+          }
+        }
+        
+        // If no action verb found, assume first part is area, rest is repair rec
+        if (repairStartIndex === -1) {
+          const parts = remainingText.split(/\s{2,}/)
+          if (parts.length >= 2) {
+            area = parts[0]
+            repairRec = parts.slice(1).join(' ')
+          } else {
+            repairRec = remainingText
+          }
+        }
+        
+        // Extract recommendation number if present
+        let recommendation_number: string | undefined
+        const recMatch = line.match(recNumRegex)
+        if (recMatch) {
+          recommendation_number = recMatch[0]
+        }
+        
+        // Extract title: Use first 3-4 words from Repair Recommendation
+        let title = ''
+        if (repairRec) {
+          const words = repairRec.split(/\s+/)
+          const titleWords = []
+          for (let j = 0; j < Math.min(4, words.length); j++) {
+            if (titleWords.join(' ').length + words[j].length > 60) break
+            titleWords.push(words[j])
+          }
+          title = titleWords.join(' ')
+        }
+        
+        // Fallback to section if no good title
+        if (!title || title.length < 3) {
+          title = `${section} - ${area || 'Recommendation'}`.substring(0, 60)
+        }
+        
+        // Build description
+        const descParts = []
+        descParts.push(`Section: ${section}`)
+        if (area) descParts.push(`Area/Component: ${area}`)
+        if (repairRec) descParts.push(`Repair Recommendation: ${repairRec}`)
+        if (statusText && statusText !== status) descParts.push(`Status: ${statusText}`)
+        if (remarks) descParts.push(`Remarks: ${remarks}`)
+        
+        candidates.push({
+          title,
+          description: descParts.join('\n'),
+          recommendation_number,
+          area,
+          status: statusText.toLowerCase().replace(/[-\s]/g, '_') || 'pending_approval',
+          remarks
+        })
       }
     }
 

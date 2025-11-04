@@ -249,6 +249,72 @@ export default function ExtractPage() {
     }
   };
 
+  const addAllRecommendations = async () => {
+    if (recommendations.length === 0) {
+      setMessage("No recommendations to add");
+      setTimeout(() => setMessage(""), 3000);
+      return;
+    }
+
+    setImporting(true);
+    setMessage("");
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const rec of recommendations) {
+      try {
+        // Get next recommendation number
+        const numberResponse = await fetch("/api/recommendations/next-number");
+        let recNumber = undefined;
+        if (numberResponse.ok) {
+          const numberData = await numberResponse.json();
+          recNumber = numberData.recommendation_number;
+        }
+
+        const response = await fetch("/api/recommendations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recommendation_number: recNumber,
+            title: rec.title,
+            description: rec.description,
+            priority: rec.priority,
+            status: rec.status,
+            due_date: rec.dueDate || null,
+            inspection_date: rec.inspectionDate || null,
+          }),
+        });
+
+        if (response.ok) {
+          successCount++;
+          setMessage(`Adding... ${successCount}/${recommendations.length}`);
+        } else {
+          failCount++;
+        }
+      } catch (error) {
+        console.error("Add error:", error);
+        failCount++;
+      }
+    }
+
+    setMessage(
+      `✓ Added ${successCount} recommendation(s)${failCount > 0 ? `, ${failCount} failed` : ""}`
+    );
+    
+    // Clear all recommendations after successful bulk add
+    if (successCount > 0) {
+      setRecommendations([]);
+    }
+    
+    setImporting(false);
+    
+    // Redirect to dashboard after a delay
+    setTimeout(() => {
+      router.push("/");
+    }, 2000);
+  };
+
   const selectedCount = recommendations.filter(rec => rec.selected).length;
 
   return (
@@ -362,9 +428,16 @@ export default function ExtractPage() {
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-gray-800">
-                Step 2: Review & Select ({selectedCount} of {recommendations.length} selected)
+                Step 2: Review & Add ({recommendations.length} recommendation{recommendations.length !== 1 ? 's' : ''} extracted)
               </h2>
               <div className="flex gap-2">
+                <button
+                  onClick={addAllRecommendations}
+                  disabled={importing || recommendations.length === 0}
+                  className="px-4 py-2 text-sm font-bold text-white bg-gradient-to-b from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 active:from-blue-700 active:to-blue-900 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed shadow-[0_4px_0_0_rgba(29,78,216,1)] hover:shadow-[0_2px_0_0_rgba(29,78,216,1)] active:shadow-[0_1px_0_0_rgba(29,78,216,1)] hover:translate-y-[2px] active:translate-y-[3px] disabled:shadow-none disabled:translate-y-0 transition-all rounded uppercase tracking-wide"
+                >
+                  {importing ? `Adding... (${recommendations.length})` : `Add All (${recommendations.length})`}
+                </button>
                 <button
                   onClick={toggleSelectAll}
                   className="px-3 py-1.5 text-sm font-semibold text-slate-700 bg-slate-100 border border-slate-300 hover:bg-slate-200 transition-colors"

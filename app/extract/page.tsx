@@ -12,6 +12,7 @@ type ExtractedRecommendation = {
   dueDate: string;
   inspectionDate: string;
   recommendation_number?: string;
+  inspectorName?: string;
   selected: boolean;
 };
 
@@ -215,13 +216,14 @@ export default function ExtractPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          recommendation_number: recNumber,
+          recommendation_number: rec.recommendation_number || recNumber,
           title: rec.title,
           description: rec.description,
           priority: rec.priority,
           status: rec.status,
           due_date: rec.dueDate || null,
           inspection_date: rec.inspectionDate || null,
+          inspector_name: rec.inspectorName || null,
         }),
       });
 
@@ -273,13 +275,14 @@ export default function ExtractPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            recommendation_number: recNumber,
+            recommendation_number: rec.recommendation_number || recNumber,
             title: rec.title,
             description: rec.description,
             priority: rec.priority,
             status: rec.status,
             due_date: rec.dueDate || null,
             inspection_date: rec.inspectionDate || null,
+            inspector_name: rec.inspectorName || null,
           }),
         });
 
@@ -340,13 +343,14 @@ export default function ExtractPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            recommendation_number: recNumber,
+            recommendation_number: rec.recommendation_number || recNumber,
             title: rec.title,
             description: rec.description,
             priority: rec.priority,
             status: rec.status,
             due_date: rec.dueDate || null,
             inspection_date: rec.inspectionDate || null,
+            inspector_name: rec.inspectorName || null,
           }),
         });
 
@@ -601,10 +605,19 @@ export default function ExtractPage() {
                       #
                     </th>
                     <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Rec #
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       Title
                     </th>
                     <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       Description
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Inspector
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Inspection Date
                     </th>
                     <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       Priority
@@ -623,6 +636,15 @@ export default function ExtractPage() {
                       <td className="px-3 py-2 whitespace-nowrap text-sm font-semibold text-gray-900">
                         {index + 1}
                       </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700">
+                        <input
+                          type="text"
+                          value={rec.recommendation_number || ''}
+                          onChange={(e) => updateRecommendation(rec.id, "recommendation_number", e.target.value)}
+                          placeholder="Auto"
+                          className="w-32 px-2 py-1 border border-gray-300 rounded text-xs text-black focus:outline-none focus:border-blue-500"
+                        />
+                      </td>
                       <td className="px-3 py-2 text-sm text-gray-900">
                         <input
                           type="text"
@@ -636,6 +658,23 @@ export default function ExtractPage() {
                           value={rec.description}
                           onChange={(e) => updateRecommendation(rec.id, "description", e.target.value)}
                           rows={2}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-black focus:outline-none focus:border-blue-500"
+                        />
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <input
+                          type="text"
+                          value={rec.inspectorName || ''}
+                          onChange={(e) => updateRecommendation(rec.id, "inspectorName", e.target.value)}
+                          placeholder="Inspector name"
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-black focus:outline-none focus:border-blue-500"
+                        />
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <input
+                          type="date"
+                          value={rec.inspectionDate}
+                          onChange={(e) => updateRecommendation(rec.id, "inspectionDate", e.target.value)}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-black focus:outline-none focus:border-blue-500"
                         />
                       </td>

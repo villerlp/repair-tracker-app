@@ -7,8 +7,9 @@ CREATE TABLE repair_recommendations (
   description TEXT,
   priority TEXT CHECK (priority IN ('low', 'medium', 'high', 'critical')) DEFAULT 'medium',
   status TEXT CHECK (status IN ('approved', 'not_approved', 'pending_approval', 'deferred', 'temporary_repair')) DEFAULT 'pending_approval',
-  inspection_date DATE,
   due_date DATE,
+  inspection_date DATE,
+  inspector_name TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -103,3 +104,8 @@ FROM repair_recommendations rr
 JOIN user_profiles up ON rr.user_id = up.id
 JOIN auth.users au ON rr.user_id = au.id
 WHERE up.role != 'manager' OR up.role IS NULL;
+
+-- Migration: Add inspector fields to existing table
+-- Run this if you already have the table created:
+-- ALTER TABLE repair_recommendations ADD COLUMN IF NOT EXISTS inspection_date DATE;
+-- ALTER TABLE repair_recommendations ADD COLUMN IF NOT EXISTS inspector_name TEXT;
